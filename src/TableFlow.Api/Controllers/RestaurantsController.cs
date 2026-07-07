@@ -55,7 +55,7 @@ namespace TableFlow.Api.Controllers
         public IActionResult GetByCuisineType(string cuisineType)
         {
             if (string.IsNullOrWhiteSpace(cuisineType))
-                return BadRequest("Type is required.");
+                return BadRequest("CuisineType is required.");
 
             var restaurants = _restaurantService.GetByCuisineType(cuisineType);
 
