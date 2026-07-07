@@ -33,9 +33,9 @@ namespace TableFlow.Api.Services
             return Restaurants.Where(r => r.IsActive).ToList();
         }
 
-        public IReadOnlyList<RestaurantResponse> GetByCuisineType(string type)
+        public IReadOnlyList<RestaurantResponse> GetByCuisineType(string cuisineType)
         {
-            return Restaurants.Where(r => r.CuisineType.Equals(type, StringComparison.OrdinalIgnoreCase)).ToList();
+            return Restaurants.Where(r => r.CuisineType.Equals(cuisineType, StringComparison.OrdinalIgnoreCase)).ToList();
         }
     }
 }
