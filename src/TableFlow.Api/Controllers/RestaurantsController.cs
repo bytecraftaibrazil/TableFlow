@@ -37,8 +37,9 @@ namespace TableFlow.Api.Controllers
             return Ok(restaurant);
         }
 
+        [HttpGet("city")]
         [HttpGet("city/{city}")]
-        public IActionResult GetByCity(string city)
+        public IActionResult GetByCity(string? city)
         {
             if (string.IsNullOrWhiteSpace(city))
                 return BadRequest("City is required.");
@@ -51,11 +52,12 @@ namespace TableFlow.Api.Controllers
             return Ok(restaurants);
         }
 
+        [HttpGet("cuisine")]
         [HttpGet("cuisine/{cuisineType}")]
-        public IActionResult GetByCuisineType(string cuisineType)
+        public IActionResult GetByCuisineType(string? cuisineType)
         {
             if (string.IsNullOrWhiteSpace(cuisineType))
-                return BadRequest("CuisineType is required.");
+                return BadRequest("Cuisine is required.");
 
             var restaurants = _restaurantService.GetByCuisineType(cuisineType);
 
