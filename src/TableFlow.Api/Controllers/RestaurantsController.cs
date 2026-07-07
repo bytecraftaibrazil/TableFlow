@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using TableFlow.Api.DTOs;
+using TableFlow.Api.Interfaces;
 
 namespace TableFlow.Api.Controllers
 {
@@ -7,18 +7,18 @@ namespace TableFlow.Api.Controllers
     [Route("restaurants")]
     public class RestaurantsController : ControllerBase
     {
-        private static readonly List<RestaurantResponse> Restaurants =
-        [
-            new(1, "Ocean Grill", "Seafood", "Rio de Janeiro", true),
-            new(2, "Pasta House", "Italian", "São Paulo", true),
-            new(3, "Green Garden", "Vegetarian", "Curitiba", false),
-            new(4, "Sunset Bistro", "Contemporary", "Florianópolis", true)
-        ];
+        private readonly IRestaurantService _restaurantService;
+
+        public RestaurantsController(IRestaurantService restaurantService)
+        {
+            _restaurantService = restaurantService;
+        }
 
         [HttpGet]
         public IActionResult GetAll()
         {
-            return Ok(Restaurants);
+            var restaurants = _restaurantService.GetAll();
+            return Ok(restaurants);
         }
 
         [HttpGet("{id:int}")]
@@ -29,7 +29,8 @@ namespace TableFlow.Api.Controllers
                 return BadRequest("Restaurant id must be greater than zero.");
             }
 
-            var restaurant = Restaurants.FirstOrDefault(r => r.Id == id);
+            var restaurant = _restaurantService.GetById(id);
+
             if (restaurant is null)
                 return NotFound();
 
@@ -42,10 +43,32 @@ namespace TableFlow.Api.Controllers
             if (string.IsNullOrWhiteSpace(city))
                 return BadRequest("City is required.");
 
-            var restaurants = Restaurants.Where(r => r.City.Equals(city, StringComparison.OrdinalIgnoreCase)).ToList();
+            var restaurants = _restaurantService.GetByCity(city);
 
             if (restaurants.Count == 0)
                 return NotFound();
+
+            return Ok(restaurants);
+        }
+
+        [HttpGet("type/{type}")]
+        public IActionResult GetByType(string type)
+        {
+            if (string.IsNullOrWhiteSpace(type))
+                return BadRequest("Type is required.");
+
+            var restaurants = _restaurantService.GetByType(type);
+
+            if (restaurants.Count == 0)
+                return NotFound();
+
+            return Ok(restaurants);
+        }
+
+        [HttpGet("active")]
+        public IActionResult GetActive()
+        {
+            var restaurants = _restaurantService.GetActive();
 
             return Ok(restaurants);
         }

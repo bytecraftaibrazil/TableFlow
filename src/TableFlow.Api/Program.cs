@@ -1,7 +1,13 @@
+using TableFlow.Api.Interfaces;
+using TableFlow.Api.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add support for controllers and API endpoints
 builder.Services.AddControllers();
+
+builder.Services.AddScoped<IRestaurantService, RestaurantService>();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
