@@ -51,13 +51,13 @@ namespace TableFlow.Api.Controllers
             return Ok(restaurants);
         }
 
-        [HttpGet("type/{type}")]
-        public IActionResult GetByType(string type)
+        [HttpGet("cuisine/{type}")]
+        public IActionResult GetByCuisineType(string type)
         {
             if (string.IsNullOrWhiteSpace(type))
                 return BadRequest("Type is required.");
 
-            var restaurants = _restaurantService.GetByType(type);
+            var restaurants = _restaurantService.GetByCuisineType(type);
 
             if (restaurants.Count == 0)
                 return NotFound();

@@ -12,6 +12,6 @@ namespace TableFlow.Api.Interfaces
 
         IReadOnlyList<RestaurantResponse> GetActive();
 
-        IReadOnlyList<RestaurantResponse> GetByType(string type);
+        IReadOnlyList<RestaurantResponse> GetByCuisineType(string type);
     }
 }
