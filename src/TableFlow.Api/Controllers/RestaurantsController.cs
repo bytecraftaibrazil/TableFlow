@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using TableFlow.Api.Interfaces;
+using TableFlow.Api.DTOs;
 
 namespace TableFlow.Api.Controllers
 {
@@ -13,6 +14,8 @@ namespace TableFlow.Api.Controllers
         {
             _restaurantService = restaurantService;
         }
+
+        #region GET
 
         [HttpGet]
         public IActionResult GetAll()
@@ -74,5 +77,34 @@ namespace TableFlow.Api.Controllers
 
             return Ok(restaurants);
         }
+
+        #endregion
+
+        #region Post
+        [HttpPost]
+        public IActionResult Create(CreateRestaurantRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Name))
+                return BadRequest("Name is required.");
+
+            if (string.IsNullOrWhiteSpace(request.CuisineType))
+                return BadRequest("Cuisine type is required.");
+
+            if (string.IsNullOrWhiteSpace(request.City))
+                return BadRequest("City is required.");
+
+            if (request.Name.Trim().Length < 3)
+                return BadRequest("Name must have at least 3 characters.");
+
+            var restaurant = _restaurantService.Create(request);
+
+            return CreatedAtAction(
+                nameof(GetById),
+                new { id = restaurant.Id },
+                restaurant
+            );
+        }
+        #endregion
+
     }
 }

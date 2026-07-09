@@ -37,5 +37,24 @@ namespace TableFlow.Api.Services
         {
             return Restaurants.Where(r => r.CuisineType.Equals(cuisineType, StringComparison.OrdinalIgnoreCase)).ToList();
         }
+
+        public RestaurantResponse Create(CreateRestaurantRequest request)
+        {
+            var nextId = Restaurants.Count == 0
+            ? 1
+            : Restaurants.Max(r => r.Id) + 1;
+
+            var restaurant = new RestaurantResponse(
+                nextId,
+                request.Name!,
+                request.CuisineType!,
+                request.City!,
+                request.IsActive
+            );
+
+            Restaurants.Add(restaurant);
+
+            return restaurant;
+        }
     }
 }
