@@ -87,14 +87,14 @@ namespace TableFlow.Api.Controllers
             if (string.IsNullOrWhiteSpace(request.Name))
                 return BadRequest("Name is required.");
 
+            if (request.Name.Trim().Length < 3)
+                return BadRequest("Name must have at least 3 characters.");
+
             if (string.IsNullOrWhiteSpace(request.CuisineType))
                 return BadRequest("Cuisine type is required.");
 
             if (string.IsNullOrWhiteSpace(request.City))
                 return BadRequest("City is required.");
-
-            if (request.Name.Trim().Length < 3)
-                return BadRequest("Name must have at least 3 characters.");
 
             var restaurant = _restaurantService.Create(request);
 
@@ -106,5 +106,35 @@ namespace TableFlow.Api.Controllers
         }
         #endregion
 
+        #region Put
+        [HttpPut("{id:int}")]
+        public IActionResult Update(int id, UpdateRestaurantRequest request)
+        {
+            if (id <= 0)
+                return BadRequest("Restaurant id must be greater than zero.");
+
+            if (string.IsNullOrWhiteSpace(request.Name))
+                return BadRequest("Name is required.");
+
+            if (request.Name.Trim().Length < 3)
+                return BadRequest("Name must have at least 3 characters.");
+
+            if (string.IsNullOrWhiteSpace(request.CuisineType))
+                return BadRequest("Cuisine type is required.");
+
+            if (request.CuisineType.Trim().Length < 3)
+                return BadRequest("Cuisine must have at least 3 characters.");
+
+            if (string.IsNullOrWhiteSpace(request.City))
+                return BadRequest("City is required.");
+
+            var restaurant = _restaurantService.Update(id, request);
+
+            if (restaurant is null)
+                return NotFound();
+
+            return Ok(restaurant);
+        }
+        #endregion
     }
 }

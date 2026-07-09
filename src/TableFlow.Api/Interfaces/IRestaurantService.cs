@@ -15,5 +15,7 @@ namespace TableFlow.Api.Interfaces
         IReadOnlyList<RestaurantResponse> GetByCuisineType(string cuisineType);
 
         RestaurantResponse Create(CreateRestaurantRequest request);
+
+        RestaurantResponse? Update(int id, UpdateRestaurantRequest request);
     }
 }

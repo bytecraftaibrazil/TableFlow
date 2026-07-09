@@ -56,5 +56,24 @@ namespace TableFlow.Api.Services
 
             return restaurant;
         }
+
+        public RestaurantResponse? Update(int id, UpdateRestaurantRequest request)
+        {
+            var index = Restaurants.FindIndex(r => r.Id == id);
+            if (index == -1)
+                return null;
+
+            var updateRestaurant = new RestaurantResponse(
+                id,
+                request.Name!,
+                request.CuisineType!,
+                request.City!,
+                request.IsActive
+            );
+
+            Restaurants[index] = updateRestaurant;
+
+            return updateRestaurant;
+        }
     }
 }
