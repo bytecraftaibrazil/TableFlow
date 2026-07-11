@@ -337,4 +337,74 @@ PUT is used to update an existing resource.
 
 ### Next Steps
 
-Add support for deleting restaurants and continue improving validation consistency across the module.
+---
+
+## Phase 1 — Sprint 1 — Mission 5
+
+### Implementation Summary
+
+Added support for deleting restaurants.
+
+Implemented:
+
+- DELETE /restaurants/{id}
+- Delete method in IRestaurantService
+- Delete logic in RestaurantService
+
+The API now receives the restaurant ID from the route and removes the matching restaurant from the in-memory list.
+
+### Technical Decisions
+
+The delete operation was implemented using the restaurant ID from the route.
+
+The controller validates the ID and handles HTTP responses.
+
+The service is responsible for locating and removing the restaurant from the in-memory list.
+
+The service returns a boolean value to indicate whether the delete operation succeeded.
+
+### Rationale
+
+DELETE is the appropriate HTTP method for removing an existing resource.
+
+Returning 204 No Content makes sense because the operation succeeds and the API does not need to return a response body.
+
+Keeping the delete logic in the service maintains separation between HTTP concerns and application logic.
+
+### Trade-offs
+
+Pros:
+
+- Clear delete endpoint
+- Controller remains focused on HTTP concerns
+- Service centralizes restaurant application logic
+- The Restaurants module now has a complete basic CRUD flow
+
+Cons:
+
+- Data is still stored in memory
+- Delete is permanent in the current list
+- No soft delete behavior yet
+- No database persistence yet
+
+### Validation
+
+Tested the following scenarios:
+
+- DELETE /restaurants/{id} returns 204 No Content when the restaurant exists
+- Deleted restaurant returns 404 Not Found when requested again
+- DELETE /restaurants/0 returns 400 Bad Request
+- DELETE /restaurants/999 returns 404 Not Found
+- Repeating the same delete returns 404 Not Found after the first successful deletion
+
+### Technical Notes
+
+DELETE is used to remove an existing resource.
+
+204 No Content is appropriate when the operation succeeds and there is no response body to return.
+
+The service returns a boolean result instead of an HTTP response because status codes are handled by the controller.
+
+### Next Steps
+
+Review the complete Restaurants CRUD flow and improve validation consistency across the module.

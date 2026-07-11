@@ -75,5 +75,17 @@ namespace TableFlow.Api.Services
 
             return updateRestaurant;
         }
+
+        public bool Delete(int id)
+        {
+            var index = Restaurants.FindIndex(r => r.Id == id);
+
+            if (index == -1)
+                return false;
+
+            Restaurants.RemoveAt(index);
+
+            return true;
+        }
     }
 }

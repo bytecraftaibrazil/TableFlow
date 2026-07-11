@@ -17,5 +17,7 @@ namespace TableFlow.Api.Interfaces
         RestaurantResponse Create(CreateRestaurantRequest request);
 
         RestaurantResponse? Update(int id, UpdateRestaurantRequest request);
+
+        bool Delete(int id);
     }
 }

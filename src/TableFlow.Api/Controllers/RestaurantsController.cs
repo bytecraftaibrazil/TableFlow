@@ -80,7 +80,7 @@ namespace TableFlow.Api.Controllers
 
         #endregion
 
-        #region Post
+        #region POST
         [HttpPost]
         public IActionResult Create(CreateRestaurantRequest request)
         {
@@ -106,7 +106,7 @@ namespace TableFlow.Api.Controllers
         }
         #endregion
 
-        #region Put
+        #region PUT
         [HttpPut("{id:int}")]
         public IActionResult Update(int id, UpdateRestaurantRequest request)
         {
@@ -135,6 +135,24 @@ namespace TableFlow.Api.Controllers
 
             return Ok(restaurant);
         }
+        #endregion
+        
+        #region DELETE
+        [HttpDelete("{id:int}")]
+        public IActionResult Delete(int id)
+        {
+            if (id <= 0)
+                return BadRequest("Restaurant id must be greater than zero");
+
+            var deleted = _restaurantService.Delete(id);
+
+            if (!deleted)
+                return NotFound();
+
+            return NoContent();
+        }
+
+
         #endregion
     }
 }
