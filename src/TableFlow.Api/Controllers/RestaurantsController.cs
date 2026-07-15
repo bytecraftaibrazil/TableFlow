@@ -18,14 +18,27 @@ namespace TableFlow.Api.Controllers
         #region GET
 
         [HttpGet]
-        public IActionResult GetAll()
+        [ProducesResponseType(
+            typeof(IReadOnlyList<RestaurantResponse>),
+            StatusCodes.Status200OK
+        )]
+        public ActionResult<IReadOnlyList<RestaurantResponse>> GetAll()
         {
             var restaurants = _restaurantService.GetAll();
             return Ok(restaurants);
         }
 
         [HttpGet("{id:int}")]
-        public IActionResult GetById(int id)
+        [ProducesResponseType(
+            typeof(RestaurantResponse),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(string),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public ActionResult<RestaurantResponse> GetById(int id)
         {
             if (id <= 0)
                 return BadRequest("Restaurant id must be greater than zero.");
@@ -40,7 +53,16 @@ namespace TableFlow.Api.Controllers
 
         [HttpGet("city")]
         [HttpGet("city/{city}")]
-        public IActionResult GetByCity(string? city)
+        [ProducesResponseType(
+        typeof(IReadOnlyList<RestaurantResponse>),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(string),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public ActionResult<IReadOnlyList<RestaurantResponse>> GetByCity(string? city)
         {
             if (string.IsNullOrWhiteSpace(city))
                 return BadRequest("City is required.");
@@ -55,7 +77,16 @@ namespace TableFlow.Api.Controllers
 
         [HttpGet("cuisine")]
         [HttpGet("cuisine/{cuisineType}")]
-        public IActionResult GetByCuisineType(string? cuisineType)
+        [ProducesResponseType(
+            typeof(IReadOnlyList<RestaurantResponse>),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(string),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public ActionResult<IReadOnlyList<RestaurantResponse>> GetByCuisineType(string? cuisineType)
         {
             if (string.IsNullOrWhiteSpace(cuisineType))
                 return BadRequest("Cuisine type is required.");
@@ -69,7 +100,11 @@ namespace TableFlow.Api.Controllers
         }
 
         [HttpGet("active")]
-        public IActionResult GetActive()
+        [ProducesResponseType(
+            typeof(IReadOnlyList<RestaurantResponse>),
+            StatusCodes.Status200OK
+        )]
+        public ActionResult<IReadOnlyList<RestaurantResponse>> GetActive()
         {
             var restaurants = _restaurantService.GetActive();
 
@@ -80,7 +115,15 @@ namespace TableFlow.Api.Controllers
 
         #region POST
         [HttpPost]
-        public IActionResult Create(CreateRestaurantRequest request)
+        [ProducesResponseType(
+            typeof(RestaurantResponse),
+            StatusCodes.Status201Created
+        )]
+        [ProducesResponseType(
+            typeof(string),
+            StatusCodes.Status400BadRequest
+        )]
+        public ActionResult<RestaurantResponse> Create(CreateRestaurantRequest request)
         {
             var validationError = ValidateRestaurantInput(
                 request.Name,
@@ -103,7 +146,16 @@ namespace TableFlow.Api.Controllers
 
         #region PUT
         [HttpPut("{id:int}")]
-        public IActionResult Update(int id, UpdateRestaurantRequest request)
+        [ProducesResponseType(
+            typeof(RestaurantResponse),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(string),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public ActionResult<RestaurantResponse> Update(int id, UpdateRestaurantRequest request)
         {
             if (id <= 0)
                 return BadRequest("Restaurant id must be greater than zero.");
@@ -128,6 +180,12 @@ namespace TableFlow.Api.Controllers
 
         #region DELETE
         [HttpDelete("{id:int}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(
+            typeof(string),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public IActionResult Delete(int id)
         {
             if (id <= 0)
