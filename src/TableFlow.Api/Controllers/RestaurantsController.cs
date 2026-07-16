@@ -34,19 +34,27 @@ namespace TableFlow.Api.Controllers
             StatusCodes.Status200OK
         )]
         [ProducesResponseType(
-            typeof(string),
+            typeof(ProblemDetails),
             StatusCodes.Status400BadRequest
         )]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
         public ActionResult<RestaurantResponse> GetById(int id)
         {
             if (id <= 0)
-                return BadRequest("Restaurant id must be greater than zero.");
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid restaurant id",
+                    detail: "Restaurant id must be greater than zero."
+                    );
 
             var restaurant = _restaurantService.GetById(id);
 
             if (restaurant is null)
-                return NotFound();
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Restaurant not found",
+                    detail: $"Restaurant with id {id} was not found."
+                );
 
             return Ok(restaurant);
         }
@@ -54,23 +62,34 @@ namespace TableFlow.Api.Controllers
         [HttpGet("city")]
         [HttpGet("city/{city}")]
         [ProducesResponseType(
-        typeof(IReadOnlyList<RestaurantResponse>),
+            typeof(IReadOnlyList<RestaurantResponse>),
             StatusCodes.Status200OK
         )]
         [ProducesResponseType(
-            typeof(string),
+            typeof(ProblemDetails),
             StatusCodes.Status400BadRequest
         )]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound
+        )]
         public ActionResult<IReadOnlyList<RestaurantResponse>> GetByCity(string? city)
         {
             if (string.IsNullOrWhiteSpace(city))
-                return BadRequest("City is required.");
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid city filter",
+                    detail: "City is required."
+                );
 
             var restaurants = _restaurantService.GetByCity(city);
 
             if (restaurants.Count == 0)
-                return NotFound();
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Restaurants not found",
+                    detail: $"No restaurants were found in the city '{city}'."
+                    );
 
             return Ok(restaurants);
         }
@@ -82,19 +101,32 @@ namespace TableFlow.Api.Controllers
             StatusCodes.Status200OK
         )]
         [ProducesResponseType(
-            typeof(string),
+            typeof(ProblemDetails),
             StatusCodes.Status400BadRequest
         )]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public ActionResult<IReadOnlyList<RestaurantResponse>> GetByCuisineType(string? cuisineType)
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound
+        )]
+        public ActionResult<IReadOnlyList<RestaurantResponse>> GetByCuisineType(
+            string? cuisineType
+        )
         {
             if (string.IsNullOrWhiteSpace(cuisineType))
-                return BadRequest("Cuisine type is required.");
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid cuisine filter",
+                    detail: "Cuisine type is required."
+                );
 
             var restaurants = _restaurantService.GetByCuisineType(cuisineType);
 
             if (restaurants.Count == 0)
-                return NotFound();
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Restaurants not found",
+                    detail: $"No restaurants were found with cuisine type '{cuisineType}'."
+                );
 
             return Ok(restaurants);
         }
@@ -120,7 +152,7 @@ namespace TableFlow.Api.Controllers
             StatusCodes.Status201Created
         )]
         [ProducesResponseType(
-            typeof(string),
+            typeof(ProblemDetails),
             StatusCodes.Status400BadRequest
         )]
         public ActionResult<RestaurantResponse> Create(CreateRestaurantRequest request)
@@ -132,7 +164,11 @@ namespace TableFlow.Api.Controllers
             );
 
             if (validationError is not null)
-                return BadRequest(validationError);
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid restaurant data",
+                    detail: validationError
+                );
 
             var restaurant = _restaurantService.Create(request);
 
@@ -151,14 +187,20 @@ namespace TableFlow.Api.Controllers
             StatusCodes.Status200OK
         )]
         [ProducesResponseType(
-            typeof(string),
+            typeof(ProblemDetails),
             StatusCodes.Status400BadRequest
         )]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound)]
         public ActionResult<RestaurantResponse> Update(int id, UpdateRestaurantRequest request)
         {
             if (id <= 0)
-                return BadRequest("Restaurant id must be greater than zero.");
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid restaurant id",
+                    detail: "Restaurant id must be greater than zero."
+                );
 
             var validationError = ValidateRestaurantInput(
                request.Name,
@@ -167,13 +209,20 @@ namespace TableFlow.Api.Controllers
            );
 
             if (validationError is not null)
-                return BadRequest(validationError);
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid restaurant data",
+                    detail: validationError
+                );
 
             var restaurant = _restaurantService.Update(id, request);
 
             if (restaurant is null)
-                return NotFound();
-
+                return Problem(
+                            statusCode: StatusCodes.Status404NotFound,
+                            title: "Restaurant not found",
+                            detail: $"Restaurant with id {id} was not found."
+                        );
             return Ok(restaurant);
         }
         #endregion
@@ -182,19 +231,29 @@ namespace TableFlow.Api.Controllers
         [HttpDelete("{id:int}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(
-            typeof(string),
+            typeof(ProblemDetails),
             StatusCodes.Status400BadRequest
         )]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound)]
         public IActionResult Delete(int id)
         {
             if (id <= 0)
-                return BadRequest("Restaurant id must be greater than zero");
+                return Problem(
+                            statusCode: StatusCodes.Status400BadRequest,
+                            title: "Invalid restaurant id",
+                            detail: "Restaurant id must be greater than zero."
+                        );
 
             var deleted = _restaurantService.Delete(id);
 
             if (!deleted)
-                return NotFound();
+                return Problem(
+                            statusCode: StatusCodes.Status404NotFound,
+                            title: "Restaurant not found",
+                            detail: $"Restaurant with id {id} was not found."
+                        );
 
             return NoContent();
         }
