@@ -108,5 +108,59 @@ namespace TableFlow.Api.Controllers
             return Ok(tables);
         }
         #endregion
+
+        #region Post
+        [HttpPost]
+        [ProducesResponseType(
+            typeof(TableResponse),
+            StatusCodes.Status201Created
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
+        public ActionResult<TableResponse> Create(CreateTableRequest request)
+        {
+            var validationError = ValidateTableInput(
+                request.RestaurantId,
+                request.Number,
+                request.Capacity
+            );
+
+            if (validationError is not null)
+                return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid table data",
+                detail: validationError
+            );
+
+            var table =_tableService.Create(request);
+
+            return CreatedAtAction(
+                nameof(GetById),
+                new { id = table.Id },
+                table
+            );
+        }
+
+        #endregion
+
+        private static string? ValidateTableInput(
+            int restaurantId,
+            int number,
+            int capacity
+        )
+        {
+            if (restaurantId <= 0)
+                return "Restaurant id must be greater than zero.";
+
+            if (number <= 0)
+                return "Table number must be greater than zero.";
+
+            if (capacity <= 0)
+                return "Table capacity must be greater than zero.";
+
+            return null;
+        }
     }
 }

@@ -16,6 +16,7 @@ namespace TableFlow.Api.Services
             new(7, 3, 21, 6, true)
         ];
 
+        #region Get
         public IReadOnlyList<TableResponse> GetAll()
         {
             return Tables;
@@ -36,5 +37,27 @@ namespace TableFlow.Api.Services
         {
             return Tables.Where(t => t.IsActive == true).ToList();
         }
+        #endregion
+
+        public TableResponse Create(CreateTableRequest request)
+        {
+            var nextId = Tables.Count == 0
+            ? 1 : Tables.Max(t => t.Id) + 1;
+
+            var table = new TableResponse
+            (
+                nextId,
+                request.RestaurantId,
+                request.Number,
+                request.Capacity,
+                request.IsActive
+            );
+
+            Tables.Add(table);
+
+            return table;
+        }
+
+
     }
 }

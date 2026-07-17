@@ -11,5 +11,7 @@ namespace TableFlow.Api.Interfaces
         IReadOnlyList<TableResponse> GetByRestaurantId(int restaurantId);
 
         IReadOnlyList<TableResponse> GetActive();
+
+        TableResponse Create(CreateTableRequest request);
     }
 }
