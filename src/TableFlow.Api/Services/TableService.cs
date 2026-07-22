@@ -58,6 +58,37 @@ namespace TableFlow.Api.Services
             return table;
         }
 
+        public TableResponse? Update(int id, UpdateTableRequest request)
+        {
+            var tableIndex = Tables.FindIndex(t => t.Id == id);
 
+            if (tableIndex == -1)
+                return null;
+
+            var updatedTable = new TableResponse
+            (
+                id,
+                request.RestaurantId,
+                request.Number,
+                request.Capacity,
+                request.IsActive
+            );
+
+            Tables[tableIndex] = updatedTable;
+
+            return updatedTable;
+        }
+
+        public bool Delete(int id)
+        {
+            var table = Tables.FirstOrDefault(t => t.Id == id);
+
+            if (table is null)
+                return false;
+
+            Tables.Remove(table);
+
+            return true;
+        }
     }
 }

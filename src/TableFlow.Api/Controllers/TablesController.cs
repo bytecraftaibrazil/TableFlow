@@ -134,13 +134,99 @@ namespace TableFlow.Api.Controllers
                 detail: validationError
             );
 
-            var table =_tableService.Create(request);
+            var table = _tableService.Create(request);
 
             return CreatedAtAction(
                 nameof(GetById),
                 new { id = table.Id },
                 table
             );
+        }
+
+        #endregion
+
+        #region Put
+        [HttpPut("{id:int}")]
+        [ProducesResponseType(
+            typeof(TableResponse),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound
+        )]
+        public ActionResult<TableResponse> Update(int id, UpdateTableRequest request)
+        {
+            if (id <= 0)
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid table id",
+                    detail: "Table id must be greater than zero."
+                );
+
+            var validationError = ValidateTableInput(
+                request.RestaurantId,
+                request.Number,
+                request.Capacity
+            );
+
+            if (validationError is not null)
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid table data",
+                    detail: validationError
+                );
+
+            var table = _tableService.Update(id, request);
+
+            if (table is null)
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Table not found",
+                    detail: $"Table with id {id} was not found."
+                );
+
+            return Ok(table);
+        }
+
+        #endregion
+
+        #region Delete
+        [HttpDelete("{id:int}")]
+        [ProducesResponseType(
+            StatusCodes.Status204NoContent
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound
+        )]
+        public IActionResult Delete(int id)
+        {
+            if (id <= 0)
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid table id",
+                    detail: "Table id must be greater than zero."
+                );
+
+            var deleted = _tableService.Delete(id);
+
+            if (!deleted)
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Table not found",
+                    detail: $"Table with id {id} was not found."
+                );
+
+            return NoContent();
         }
 
         #endregion

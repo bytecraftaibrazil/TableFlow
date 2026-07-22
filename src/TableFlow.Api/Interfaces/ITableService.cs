@@ -13,5 +13,9 @@ namespace TableFlow.Api.Interfaces
         IReadOnlyList<TableResponse> GetActive();
 
         TableResponse Create(CreateTableRequest request);
+
+        TableResponse? Update(int id, UpdateTableRequest request);
+
+        bool Delete(int id);
     }
 }
