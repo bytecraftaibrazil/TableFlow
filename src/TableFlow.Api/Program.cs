@@ -7,6 +7,7 @@ builder.Services.AddControllers();
 
 builder.Services.AddScoped<IRestaurantService, RestaurantService>();
 builder.Services.AddScoped<ITableService, TableService>();
+builder.Services.AddScoped<IReservationService, ReservationService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
