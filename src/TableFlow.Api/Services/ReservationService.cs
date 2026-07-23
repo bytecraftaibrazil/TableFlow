@@ -67,5 +67,24 @@ namespace TableFlow.Api.Services
         {
             return Reservations.Where(r => r.RestaurantId == restaurantId).ToList();
         }
+
+        public ReservationResponse Create(CreateReservationRequest request)
+        {
+            var nextId = Reservations.Count == 0 ? 1 : Reservations.Max(r => r.Id) + 1;
+
+            var reservation = new ReservationResponse(
+                nextId,
+                request.RestaurantId,
+                request.TableId,
+                request.CustomerName.Trim(),
+                request.ReservationDate,
+                request.PartySize,
+                "Peding"
+            );
+
+            Reservations.Add(reservation);
+
+            return reservation;
+        }
     }
 }

@@ -106,5 +106,70 @@ namespace TableFlow.Api.Controllers
             return Ok(reservations);
         }
         #endregion
+
+        #region Post
+        [HttpPost]
+        [ProducesResponseType(
+            typeof(ReservationResponse),
+            StatusCodes.Status201Created
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
+        public ActionResult<ReservationResponse> Create(CreateReservationRequest request)
+        {
+            var validationError = ValidateReservationInput(
+                request.RestaurantId,
+                request.TableId,
+                request.CustomerName,
+                request.ReservationDate,
+                request.PartySize
+            );
+            if (validationError is not null)
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid reservation data",
+                    detail: validationError
+                );
+
+            var reservation = _reservationService.Create(request);
+
+            return CreatedAtAction(
+                nameof(GetById),
+                new { id = reservation.Id },
+                reservation
+            );
+        }
+        #endregion
+
+        private static string? ValidateReservationInput(
+            int restaurantId,
+            int tableId,
+            string? customerName,
+            DateTime reservationDate,
+            int partySize
+        )
+        {
+            if (restaurantId <= 0)
+                return "Restaurant id must be greater than zero.";
+
+            if (tableId <= 0)
+                return "Table id must be greater than zero.";
+
+            if (string.IsNullOrWhiteSpace(customerName))
+                return "Customer name is required.";
+
+            if (customerName.Trim().Length < 3)
+                return "Customer name must have at least 3 characters.";
+
+            if (reservationDate <= DateTime.Now)
+                return "Reservation date must be in the future.";
+
+            if (partySize <= 0)
+                return "Party size must be greater than zero.";
+
+            return null;
+        }
     }
 }
