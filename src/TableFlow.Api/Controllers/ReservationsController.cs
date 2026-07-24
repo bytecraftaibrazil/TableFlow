@@ -143,6 +143,142 @@ namespace TableFlow.Api.Controllers
         }
         #endregion
 
+        #region Put
+        [HttpPut("{id:int}")]
+        [ProducesResponseType(
+            typeof(ReservationResponse),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound
+        )]
+        public ActionResult<ReservationResponse> Update(
+            int id,
+            UpdateReservationRequest request
+        )
+        {
+            if (id <= 0)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid reservation id",
+                    detail: "Reservation id must be greater than zero."
+                );
+            }
+
+            var validationError = ValidateReservationInput(
+                request.RestaurantId,
+                request.TableId,
+                request.CustomerName,
+                request.ReservationDate,
+                request.PartySize
+            );
+
+            if (validationError is not null)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid reservation data",
+                    detail: validationError
+                );
+            }
+
+            var reservation = _reservationService.Update(id, request);
+
+            if (reservation is null)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Reservation not found",
+                    detail: $"Reservation with id {id} was not found."
+                );
+            }
+
+            return Ok(reservation);
+        }
+
+        [HttpPut("{id:int}/cancel")]
+        [ProducesResponseType(
+            typeof(ReservationResponse),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound
+        )]
+        public ActionResult<ReservationResponse> Cancel(int id)
+        {
+            if (id <= 0)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid reservation id",
+                    detail: "Reservation id must be greater than zero."
+                );
+            }
+
+            var reservation = _reservationService.Cancel(id);
+
+            if (reservation is null)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Reservation not found",
+                    detail: $"Reservation with id {id} was not found."
+                );
+            }
+
+            return Ok(reservation);
+        }
+
+        [HttpPut("{id:int}/confirm")]
+        [ProducesResponseType(
+            typeof(ReservationResponse),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound
+        )]
+        public ActionResult<ReservationResponse> Confim(int id)
+        {
+            if (id <= 0)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid reservation id",
+                    detail: "Reservation id must be greater than zero."
+                );
+            }
+
+            var reservation = _reservationService.Confirm(id);
+
+            if (reservation is null)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Reservation not found",
+                    detail: $"Reservation with id {id} was not found."
+                );
+            }
+
+            return Ok(reservation);
+        }
+        #endregion
+
         private static string? ValidateReservationInput(
             int restaurantId,
             int tableId,

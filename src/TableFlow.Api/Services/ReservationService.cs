@@ -86,5 +86,74 @@ namespace TableFlow.Api.Services
 
             return reservation;
         }
+
+        public ReservationResponse? Update(int id, UpdateReservationRequest request)
+        {
+            var reservationIndex = Reservations.FindIndex(r => r.Id == id);
+
+            if (reservationIndex == -1)
+                return null;
+
+            var currentReservation = Reservations[reservationIndex];
+
+            var updatedReservation = new ReservationResponse
+            (
+                currentReservation.Id,
+                request.RestaurantId,
+                request.TableId,
+                request.CustomerName.Trim(),
+                request.ReservationDate,
+                request.PartySize,
+                currentReservation.Status
+            );
+
+            Reservations[reservationIndex] = updatedReservation;
+
+            return updatedReservation;
+        }
+
+        public ReservationResponse? Cancel(int id)
+        {
+            var reservationIndex = Reservations.FindIndex(r => r.Id == id);
+
+            if (reservationIndex == -1)
+                return null;
+
+            var currentReservation = Reservations[reservationIndex];
+
+            if (currentReservation.Status == "Cancelled")
+                return currentReservation;
+
+            var cancellReservation = currentReservation with
+            {
+                Status = "Cancelled"
+            };
+
+            Reservations[reservationIndex] = cancellReservation;
+
+            return cancellReservation;
+        }
+
+        public ReservationResponse? Confirm(int id)
+        {
+            var reservationIndex = Reservations.FindIndex(r => r.Id == id);
+
+            if (reservationIndex == -1)
+                return null;
+
+            var currentReservation = Reservations[reservationIndex];
+
+            if (currentReservation.Status == "Confirmed")
+                return currentReservation;
+
+            var cancellReservation = currentReservation with
+            {
+                Status = "Confirmed"
+            };
+
+            Reservations[reservationIndex] = cancellReservation;
+
+            return cancellReservation;
+        }
     }
 }
