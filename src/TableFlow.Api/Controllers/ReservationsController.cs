@@ -105,6 +105,46 @@ namespace TableFlow.Api.Controllers
 
             return Ok(reservations);
         }
+
+        [HttpGet("table/{tableId:int}")]
+        [ProducesResponseType(
+            typeof(IReadOnlyList<ReservationResponse>),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound
+        )]
+        public ActionResult<IReadOnlyList<ReservationResponse>>
+        GetByTableId(int tableId)
+        {
+            if (tableId <= 0)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid restaurant id",
+                    detail: "Restaurant id must be greater than zero."
+                );
+            }
+
+            var reservations = _reservationService.GetByTableId(tableId);
+
+            if (reservations.Count == 0)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Reservations not found",
+                    detail: $"No reservations were found for restaurant with id {tableId}."
+                );
+            }
+
+            return Ok(reservations);
+        }
+
         #endregion
 
         #region Post

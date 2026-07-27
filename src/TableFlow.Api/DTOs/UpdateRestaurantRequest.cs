@@ -1,6 +1,7 @@
 namespace TableFlow.Api.DTOs
 {
-    public record UpdateRestaurantRequest(
+    public record UpdateRestaurantRequest
+    (
         string? Name,
         string? CuisineType,
         string? City,

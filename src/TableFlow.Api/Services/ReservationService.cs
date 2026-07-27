@@ -68,6 +68,11 @@ namespace TableFlow.Api.Services
             return Reservations.Where(r => r.RestaurantId == restaurantId).ToList();
         }
 
+        public IReadOnlyList<ReservationResponse> GetByTableId(int tableId)
+        {
+            return Reservations.Where(r => r.TableId == tableId).ToList();
+        }
+
         public ReservationResponse Create(CreateReservationRequest request)
         {
             var nextId = Reservations.Count == 0 ? 1 : Reservations.Max(r => r.Id) + 1;

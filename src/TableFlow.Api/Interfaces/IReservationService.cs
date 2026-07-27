@@ -10,6 +10,8 @@ namespace TableFlow.Api.Interfaces
 
         IReadOnlyList<ReservationResponse> GetByRestaurantId(int restaurantId);
 
+        IReadOnlyList<ReservationResponse> GetByTableId(int tableId);
+
         ReservationResponse Create(CreateReservationRequest request);
 
         ReservationResponse? Update(int id, UpdateReservationRequest request);
