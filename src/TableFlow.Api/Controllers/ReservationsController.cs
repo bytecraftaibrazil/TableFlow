@@ -145,6 +145,41 @@ namespace TableFlow.Api.Controllers
             return Ok(reservations);
         }
 
+        [HttpGet("status")]
+        [HttpGet("status/{status}")]
+        [ProducesResponseType(
+            typeof(IReadOnlyList<ReservationResponse>),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound
+        )]
+        public ActionResult<IReadOnlyList<ReservationResponse>> GetByStatus(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid status filter",
+                    detail: "Status type is required."
+                );
+
+            var restaurants = _reservationService.GetByStatus(status);
+
+            if (restaurants.Count == 0)
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Restaurants not found",
+                    detail: $"No reservations were found with status '{status}'."
+                );
+
+            return Ok(restaurants);
+        }
+
         #endregion
 
         #region Post

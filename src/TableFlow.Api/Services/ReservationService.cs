@@ -68,6 +68,11 @@ namespace TableFlow.Api.Services
             return Reservations.Where(r => r.RestaurantId == restaurantId).ToList();
         }
 
+        public IReadOnlyList<ReservationResponse> GetByStatus(string status)
+        {
+            return Reservations.Where(r => r.Status.Equals(status, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
         public IReadOnlyList<ReservationResponse> GetByTableId(int tableId)
         {
             return Reservations.Where(r => r.TableId == tableId).ToList();

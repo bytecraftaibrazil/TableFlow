@@ -19,5 +19,7 @@ namespace TableFlow.Api.Interfaces
         ReservationResponse? Cancel(int id);
 
         ReservationResponse? Confirm(int id);
+
+        IReadOnlyList<ReservationResponse> GetByStatus(string status);
     }
 }
