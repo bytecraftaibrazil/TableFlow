@@ -1,13 +1,28 @@
 using TableFlow.Api.Interfaces;
 using TableFlow.Api.Services;
+using Microsoft.EntityFrameworkCore;
+using TableFlow.Api.Data;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var connectionString =
+    builder.Configuration.GetConnectionString(
+        "TableFlowDatabase"
+    )
+    ?? throw new InvalidOperationException(
+        "Connection string 'TableFlowDatabase' was not found."
+    );
 
 builder.Services.AddControllers();
 
 builder.Services.AddScoped<IRestaurantService, RestaurantService>();
 builder.Services.AddScoped<ITableService, TableService>();
 builder.Services.AddScoped<IReservationService, ReservationService>();
+
+builder.Services.AddDbContext<TableFlowDbContext>(
+    options =>
+        options.UseSqlServer(connectionString)
+);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
