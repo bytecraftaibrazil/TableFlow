@@ -26,6 +26,67 @@ public class TableFlowDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Entity<Restaurant>(entity =>
+        {
+            entity.ToTable("Restaurants");
+
+            entity.HasKey(restaurant => restaurant.Id);
+
+            entity.Property(restaurant => restaurant.Name)
+            .IsRequired()
+            .HasMaxLength(120);
+
+            entity.Property(restaurant => restaurant.CuisineType)
+            .IsRequired()
+            .HasMaxLength(80);
+
+            entity.Property(restaurant => restaurant.City)
+            .IsRequired()
+            .HasMaxLength(80);
+        });
+
+        modelBuilder.Entity<RestaurantTable>(entity =>
+        {
+            entity.ToTable("Tables");
+
+            entity.HasKey(table =>
+                table.Id
+            );
+
+            entity.HasIndex(table => new
+            {
+                table.RestaurantId,
+                table.Number
+            })
+            .IsUnique();
+        });
+
+        modelBuilder.Entity<Reservation>(entity =>
+        {
+            entity.ToTable("Reservations");
+
+            entity.HasKey(reservation =>
+                reservation.Id
+            );
+
+            entity.Property(reservation =>
+                reservation.CustomerName
+            )
+            .IsRequired()
+            .HasMaxLength(120);
+
+            entity.Property(reservation =>
+                reservation.ReservationDate
+            )
+            .HasColumnType("datetime2");
+
+            entity.Property(reservation =>
+                reservation.Status
+            )
+            .IsRequired()
+            .HasMaxLength(30);
+        });
+
         modelBuilder.Entity<RestaurantTable>()
             .HasOne(table =>
                 table.Restaurant
