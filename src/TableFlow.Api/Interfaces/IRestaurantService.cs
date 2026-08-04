@@ -4,20 +4,20 @@ namespace TableFlow.Api.Interfaces
 {
     public interface IRestaurantService
     {
-        IReadOnlyList<RestaurantResponse> GetAll();
+        Task<IReadOnlyList<RestaurantResponse>> GetAllAsync();
 
-        RestaurantResponse? GetById(int id);
+        Task<RestaurantResponse?> GetByIdAsync(int id);
 
-        IReadOnlyList<RestaurantResponse> GetByCity(string city);
+        Task<IReadOnlyList<RestaurantResponse>> GetByCityAsync(string city);
 
-        IReadOnlyList<RestaurantResponse> GetActive();
+        Task<IReadOnlyList<RestaurantResponse>> GetActiveAsync();
 
-        IReadOnlyList<RestaurantResponse> GetByCuisineType(string cuisineType);
+        Task<IReadOnlyList<RestaurantResponse>> GetByCuisineTypeAsync(string cuisineType);
 
-        RestaurantResponse Create(CreateRestaurantRequest request);
+        Task<RestaurantResponse> CreateAsync(CreateRestaurantRequest request);
 
-        RestaurantResponse? Update(int id, UpdateRestaurantRequest request);
+        Task<RestaurantResponse?> UpdateAsync(int id, UpdateRestaurantRequest request);
 
-        bool Delete(int id);
+        Task<bool> DeleteAsync(int id);
     }
 }

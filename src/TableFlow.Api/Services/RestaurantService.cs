@@ -1,89 +1,175 @@
+using Microsoft.EntityFrameworkCore;
+using TableFlow.Api.Data;
 using TableFlow.Api.DTOs;
+using TableFlow.Api.Entities;
 using TableFlow.Api.Interfaces;
 
 namespace TableFlow.Api.Services
 {
     public class RestaurantService : IRestaurantService
     {
-        private static readonly List<RestaurantResponse> Restaurants =
-        [
-            new(1, "Ocean Grill", "Seafood", "Rio de Janeiro", true),
-            new(2, "Pasta House", "Italian", "São Paulo", true),
-            new(3, "Green Garden", "Vegetarian", "Curitiba", false),
-            new(4, "Sunset Bistro", "Contemporary", "Florianópolis", true)
-        ];
+        private readonly TableFlowDbContext _dbContext;
 
-        public IReadOnlyList<RestaurantResponse> GetAll()
+        public RestaurantService(
+            TableFlowDbContext dbContext
+        )
         {
-            return Restaurants;
+            _dbContext = dbContext;
         }
 
-        public RestaurantResponse? GetById(int id)
+        private static RestaurantResponse ToResponse(Restaurant restaurant)
         {
-            return Restaurants.FirstOrDefault(r => r.Id == id);
-        }
-
-        public IReadOnlyList<RestaurantResponse> GetByCity(string city)
-        {
-            return Restaurants.Where(r => r.City.Equals(city, StringComparison.OrdinalIgnoreCase)).ToList();
-        }
-
-        public IReadOnlyList<RestaurantResponse> GetActive()
-        {
-            return Restaurants.Where(r => r.IsActive).ToList();
-        }
-
-        public IReadOnlyList<RestaurantResponse> GetByCuisineType(string cuisineType)
-        {
-            return Restaurants.Where(r => r.CuisineType.Equals(cuisineType, StringComparison.OrdinalIgnoreCase)).ToList();
-        }
-
-        public RestaurantResponse Create(CreateRestaurantRequest request)
-        {
-            var nextId = Restaurants.Count == 0
-            ? 1
-            : Restaurants.Max(r => r.Id) + 1;
-
-            var restaurant = new RestaurantResponse(
-                nextId,
-                request.Name!,
-                request.CuisineType!,
-                request.City!,
-                request.IsActive
+            return new RestaurantResponse(
+                restaurant.Id,
+                restaurant.Name,
+                restaurant.CuisineType,
+                restaurant.City,
+                restaurant.IsActive
             );
-
-            Restaurants.Add(restaurant);
-
-            return restaurant;
         }
 
-        public RestaurantResponse? Update(int id, UpdateRestaurantRequest request)
+        public async Task<IReadOnlyList<RestaurantResponse>> GetAllAsync()
         {
-            var index = Restaurants.FindIndex(r => r.Id == id);
-            if (index == -1)
+            return await _dbContext.Restaurants
+            .AsNoTracking()
+            .OrderBy(restaurant => restaurant.Id)
+            .Select(restaurant =>
+                new RestaurantResponse(
+                restaurant.Id,
+                restaurant.Name,
+                restaurant.CuisineType,
+                restaurant.City,
+                restaurant.IsActive
+                )
+            ).ToListAsync();
+        }
+
+        public async Task<RestaurantResponse?> GetByIdAsync(int id)
+        {
+            return await _dbContext.Restaurants
+                .AsNoTracking()
+                .Where(restaurant => restaurant.Id == id)
+                .Select(restaurant =>
+                    new RestaurantResponse(
+                        restaurant.Id,
+                        restaurant.Name,
+                        restaurant.CuisineType,
+                        restaurant.City,
+                        restaurant.IsActive
+                )
+            ).FirstOrDefaultAsync();
+        }
+
+        public async Task<IReadOnlyList<RestaurantResponse>> GetByCityAsync(string city)
+        {
+            var normalizedCity = city.Trim();
+
+            return await _dbContext.Restaurants
+                .AsNoTracking()
+                .Where(restaurant => restaurant.City == normalizedCity)
+                .OrderBy(restaurant => restaurant.Name)
+                .Select(restaurant =>
+                    new RestaurantResponse(
+                        restaurant.Id,
+                        restaurant.Name,
+                        restaurant.CuisineType,
+                        restaurant.City,
+                        restaurant.IsActive
+                    )
+                ).ToListAsync();
+        }
+
+        public async Task<IReadOnlyList<RestaurantResponse>> GetByCuisineTypeAsync(string cuisineType)
+        {
+            var normalizedCuisineType =
+                cuisineType.Trim();
+
+            return await _dbContext.Restaurants
+                .AsNoTracking()
+                .Where(restaurant =>
+                    restaurant.CuisineType
+                        == normalizedCuisineType
+                )
+                .OrderBy(restaurant =>
+                    restaurant.Name
+                )
+                .Select(restaurant =>
+                    new RestaurantResponse(
+                        restaurant.Id,
+                        restaurant.Name,
+                        restaurant.CuisineType,
+                        restaurant.City,
+                        restaurant.IsActive
+                    )
+                ).ToListAsync();
+        }
+
+        public async Task<IReadOnlyList<RestaurantResponse>> GetActiveAsync()
+        {
+            return await _dbContext.Restaurants
+                .AsNoTracking()
+                .Where(restaurant =>
+                    restaurant.IsActive
+                )
+                .OrderBy(restaurant =>
+                    restaurant.Name
+                )
+                .Select(restaurant =>
+                    new RestaurantResponse(
+                        restaurant.Id,
+                        restaurant.Name,
+                        restaurant.CuisineType,
+                        restaurant.City,
+                        restaurant.IsActive
+                    )
+                )
+                .ToListAsync();
+        }
+
+        public async Task<RestaurantResponse> CreateAsync(CreateRestaurantRequest request)
+        {
+            var restaurant = new Restaurant
+            {
+                Name = request.Name!.Trim(),
+                CuisineType = request.CuisineType!.Trim(),
+                City = request.City!.Trim(),
+                IsActive = request.IsActive
+            };
+
+            await _dbContext.Restaurants.AddAsync(restaurant);
+
+            await _dbContext.SaveChangesAsync();
+
+            return ToResponse(restaurant);
+        }
+
+        public async Task<RestaurantResponse?> UpdateAsync(int id, UpdateRestaurantRequest request)
+        {
+            var restaurant = await _dbContext.Restaurants.FindAsync(id);
+            if (restaurant is null)
                 return null;
 
-            var updateRestaurant = new RestaurantResponse(
-                id,
-                request.Name!,
-                request.CuisineType!,
-                request.City!,
-                request.IsActive
-            );
 
-            Restaurants[index] = updateRestaurant;
+            restaurant.Name = request.Name!.Trim();
+            restaurant.CuisineType = request.CuisineType!.Trim();
+            restaurant.City = request.City!.Trim();
+            restaurant.IsActive = request.IsActive;
 
-            return updateRestaurant;
+            await _dbContext.SaveChangesAsync();
+
+            return ToResponse(restaurant);
         }
 
-        public bool Delete(int id)
+        public async Task<bool> DeleteAsync(int id)
         {
-            var index = Restaurants.FindIndex(r => r.Id == id);
+            var restaurant = await _dbContext.Restaurants.FindAsync(id);
 
-            if (index == -1)
+            if (restaurant is null)
                 return false;
 
-            Restaurants.RemoveAt(index);
+            _dbContext.Restaurants.Remove(restaurant);
+
+            await _dbContext.SaveChangesAsync();
 
             return true;
         }

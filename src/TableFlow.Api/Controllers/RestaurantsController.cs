@@ -22,9 +22,10 @@ namespace TableFlow.Api.Controllers
             typeof(IReadOnlyList<RestaurantResponse>),
             StatusCodes.Status200OK
         )]
-        public ActionResult<IReadOnlyList<RestaurantResponse>> GetAll()
+        public async Task<ActionResult<IReadOnlyList<RestaurantResponse>>> GetAll()
         {
-            var restaurants = _restaurantService.GetAll();
+            var restaurants = await _restaurantService.GetAllAsync();
+
             return Ok(restaurants);
         }
 
@@ -38,7 +39,7 @@ namespace TableFlow.Api.Controllers
             StatusCodes.Status400BadRequest
         )]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-        public ActionResult<RestaurantResponse> GetById(int id)
+        public async Task<ActionResult<RestaurantResponse>> GetById(int id)
         {
             if (id <= 0)
                 return Problem(
@@ -47,7 +48,7 @@ namespace TableFlow.Api.Controllers
                     detail: "Restaurant id must be greater than zero."
                     );
 
-            var restaurant = _restaurantService.GetById(id);
+            var restaurant = await _restaurantService.GetByIdAsync(id);
 
             if (restaurant is null)
                 return Problem(
@@ -73,7 +74,7 @@ namespace TableFlow.Api.Controllers
             typeof(ProblemDetails),
             StatusCodes.Status404NotFound
         )]
-        public ActionResult<IReadOnlyList<RestaurantResponse>> GetByCity(string? city)
+        public async Task<ActionResult<IReadOnlyList<RestaurantResponse>>> GetByCity(string? city)
         {
             if (string.IsNullOrWhiteSpace(city))
                 return Problem(
@@ -82,9 +83,9 @@ namespace TableFlow.Api.Controllers
                     detail: "City is required."
                 );
 
-            var restaurants = _restaurantService.GetByCity(city);
+            var restaurants = await _restaurantService.GetByCityAsync(city);
 
-            if (restaurants.Count == 0)
+            if (!restaurants.Any())
                 return Problem(
                     statusCode: StatusCodes.Status404NotFound,
                     title: "Restaurants not found",
@@ -108,7 +109,7 @@ namespace TableFlow.Api.Controllers
             typeof(ProblemDetails),
             StatusCodes.Status404NotFound
         )]
-        public ActionResult<IReadOnlyList<RestaurantResponse>> GetByCuisineType(
+        public async Task<ActionResult<IReadOnlyList<RestaurantResponse>>> GetByCuisineType(
             string? cuisineType
         )
         {
@@ -119,9 +120,9 @@ namespace TableFlow.Api.Controllers
                     detail: "Cuisine type is required."
                 );
 
-            var restaurants = _restaurantService.GetByCuisineType(cuisineType);
+            var restaurants = await _restaurantService.GetByCuisineTypeAsync(cuisineType);
 
-            if (restaurants.Count == 0)
+            if (!restaurants.Any())
                 return Problem(
                     statusCode: StatusCodes.Status404NotFound,
                     title: "Restaurants not found",
@@ -136,9 +137,9 @@ namespace TableFlow.Api.Controllers
             typeof(IReadOnlyList<RestaurantResponse>),
             StatusCodes.Status200OK
         )]
-        public ActionResult<IReadOnlyList<RestaurantResponse>> GetActive()
+        public async Task<ActionResult<IReadOnlyList<RestaurantResponse>>> GetActive()
         {
-            var restaurants = _restaurantService.GetActive();
+            var restaurants = await _restaurantService.GetActiveAsync();
 
             return Ok(restaurants);
         }
@@ -155,7 +156,7 @@ namespace TableFlow.Api.Controllers
             typeof(ProblemDetails),
             StatusCodes.Status400BadRequest
         )]
-        public ActionResult<RestaurantResponse> Create(CreateRestaurantRequest request)
+        public async Task<ActionResult<RestaurantResponse>> Create(CreateRestaurantRequest request)
         {
             var validationError = ValidateRestaurantInput(
                 request.Name,
@@ -170,7 +171,7 @@ namespace TableFlow.Api.Controllers
                     detail: validationError
                 );
 
-            var restaurant = _restaurantService.Create(request);
+            var restaurant = await _restaurantService.CreateAsync(request);
 
             return CreatedAtAction(
                 nameof(GetById),
@@ -193,7 +194,7 @@ namespace TableFlow.Api.Controllers
         [ProducesResponseType(
             typeof(ProblemDetails),
             StatusCodes.Status404NotFound)]
-        public ActionResult<RestaurantResponse> Update(int id, UpdateRestaurantRequest request)
+        public async Task<ActionResult<RestaurantResponse>> Update(int id, UpdateRestaurantRequest request)
         {
             if (id <= 0)
                 return Problem(
@@ -215,7 +216,7 @@ namespace TableFlow.Api.Controllers
                     detail: validationError
                 );
 
-            var restaurant = _restaurantService.Update(id, request);
+            var restaurant = await _restaurantService.UpdateAsync(id, request);
 
             if (restaurant is null)
                 return Problem(
@@ -237,7 +238,7 @@ namespace TableFlow.Api.Controllers
         [ProducesResponseType(
             typeof(ProblemDetails),
             StatusCodes.Status404NotFound)]
-        public IActionResult Delete(int id)
+        public async Task<IActionResult> Delete(int id)
         {
             if (id <= 0)
                 return Problem(
@@ -246,7 +247,7 @@ namespace TableFlow.Api.Controllers
                             detail: "Restaurant id must be greater than zero."
                         );
 
-            var deleted = _restaurantService.Delete(id);
+            var deleted = await _restaurantService.DeleteAsync(id);
 
             if (!deleted)
                 return Problem(
