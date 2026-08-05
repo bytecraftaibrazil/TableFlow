@@ -1,21 +1,22 @@
 using TableFlow.Api.DTOs;
+using TableFlow.Api.Models;
 
 namespace TableFlow.Api.Interfaces
 {
     public interface ITableService
     {
-        IReadOnlyList<TableResponse> GetAll();
+        Task<IReadOnlyList<TableResponse>> GetAllAsync();
 
-        TableResponse? GetById(int id);
+        Task<TableResponse?> GetByIdAsync(int id);
 
-        IReadOnlyList<TableResponse> GetByRestaurantId(int restaurantId);
+        Task<IReadOnlyList<TableResponse>> GetByRestaurantIdAsync(int restaurantId);
 
-        IReadOnlyList<TableResponse> GetActive();
+        Task<IReadOnlyList<TableResponse>> GetActiveAsync();
 
-        TableResponse Create(CreateTableRequest request);
+        Task<TableOperationResult> CreateAsync(CreateTableRequest request);
 
-        TableResponse? Update(int id, UpdateTableRequest request);
+        Task<TableOperationResult> UpdateAsync(int id, UpdateTableRequest request);
 
-        bool Delete(int id);
+        Task<bool> DeleteAsync(int id);
     }
 }

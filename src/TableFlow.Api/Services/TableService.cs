@@ -1,92 +1,193 @@
+using Microsoft.EntityFrameworkCore;
+using TableFlow.Api.Data;
 using TableFlow.Api.DTOs;
+using TableFlow.Api.Entities;
 using TableFlow.Api.Interfaces;
+using TableFlow.Api.Models;
 
 namespace TableFlow.Api.Services
 {
     public class TableService : ITableService
     {
-        private static readonly List<TableResponse> Tables =
-        [
-            new(1, 1, 10, 4, true),
-            new(2, 1, 11, 2, true),
-            new(3, 1, 12, 6, false),
-            new(4, 2, 1, 4, true),
-            new(5, 2, 2, 8, true),
-            new(6, 3, 20, 2, true),
-            new(7, 3, 21, 6, true)
-        ];
+        private readonly TableFlowDbContext _dbContext;
+
+        public TableService(TableFlowDbContext dbContext)
+        {
+            _dbContext = dbContext;
+        }
+
+        private static TableResponse ToResponse(
+            RestaurantTable table
+        )
+        {
+            return new TableResponse(
+                table.Id,
+                table.RestaurantId,
+                table.Number,
+                table.Capacity,
+                table.IsActive
+            );
+        }
 
         #region Get
-        public IReadOnlyList<TableResponse> GetAll()
+        public async Task<IReadOnlyList<TableResponse>> GetAllAsync()
         {
-            return Tables;
+            return await _dbContext.Tables
+            .AsNoTracking()
+            .OrderBy(table => table.RestaurantId)
+            .ThenBy(table => table.Number)
+            .Select(table =>
+                new TableResponse(
+                    table.Id,
+                    table.RestaurantId,
+                    table.Number,
+                    table.Capacity,
+                    table.IsActive
+                )
+            ).ToListAsync();
         }
 
-        public TableResponse? GetById(int id)
+        public async Task<TableResponse?> GetByIdAsync(int id)
         {
-            return Tables.FirstOrDefault(t => t.Id == id);
+            return await _dbContext.Tables
+                .AsNoTracking()
+                .Where(table => table.Id == id)
+                .Select(table =>
+                new TableResponse(
+                    table.Id,
+                    table.RestaurantId,
+                    table.Number,
+                    table.Capacity,
+                    table.IsActive
+                )
+            ).FirstOrDefaultAsync();
         }
 
-        public IReadOnlyList<TableResponse> GetByRestaurantId(int restaurantId)
+        public async Task<IReadOnlyList<TableResponse>> GetByRestaurantIdAsync(int restaurantId)
         {
-            return Tables.Where(
-                t => t.RestaurantId == restaurantId).ToList();
+            return await _dbContext.Tables
+                .AsNoTracking()
+                .Where(table => table.RestaurantId == restaurantId)
+                .Select(table =>
+                new TableResponse(
+                    table.Id,
+                    table.RestaurantId,
+                    table.Number,
+                    table.Capacity,
+                    table.IsActive
+                )
+            ).ToListAsync();
         }
 
-        public IReadOnlyList<TableResponse> GetActive()
+        public async Task<IReadOnlyList<TableResponse>> GetActiveAsync()
         {
-            return Tables.Where(t => t.IsActive == true).ToList();
+            return await _dbContext.Tables
+                .Where(table => table.IsActive)
+                .OrderBy(table => table.RestaurantId)
+                .ThenBy(table => table.Number)
+                .Select(table =>
+                    new TableResponse(
+                        table.Id,
+                        table.RestaurantId,
+                        table.Number,
+                        table.Capacity,
+                        table.IsActive
+                    )
+                ).ToListAsync();
         }
         #endregion
 
-        public TableResponse Create(CreateTableRequest request)
+        public async Task<TableOperationResult> CreateAsync(CreateTableRequest request)
         {
-            var nextId = Tables.Count == 0
-            ? 1 : Tables.Max(t => t.Id) + 1;
+            var restaurantExists = await _dbContext.Restaurants
+                .AnyAsync(restaurant => restaurant.Id == request.RestaurantId);
 
-            var table = new TableResponse
-            (
-                nextId,
-                request.RestaurantId,
-                request.Number,
-                request.Capacity,
-                request.IsActive
+            if (!restaurantExists)
+                return new TableOperationResult(
+                    TableOperationStatus.RestaurantNotFound);
+
+            var numberExists = await _dbContext.Tables
+                .AnyAsync(table =>
+                    table.RestaurantId == request.RestaurantId
+                    && table.Number == request.Number
+                );
+
+            if (numberExists)
+                return new TableOperationResult(
+                    TableOperationStatus.DuplicateNumber);
+
+            var table = new RestaurantTable
+            {
+                RestaurantId = request.RestaurantId,
+                Number = request.Number,
+                Capacity = request.Capacity,
+                IsActive = request.IsActive
+            };
+
+            await _dbContext.Tables.AddAsync(table);
+            await _dbContext.SaveChangesAsync();
+
+            return new TableOperationResult(
+                TableOperationStatus.Success,
+                ToResponse(table)
             );
-
-            Tables.Add(table);
-
-            return table;
         }
 
-        public TableResponse? Update(int id, UpdateTableRequest request)
+        public async Task<TableOperationResult> UpdateAsync(int id, UpdateTableRequest request)
         {
-            var tableIndex = Tables.FindIndex(t => t.Id == id);
+            var table = await _dbContext.Tables.FindAsync(id);
 
-            if (tableIndex == -1)
-                return null;
+            if (table is null)
+                return new TableOperationResult(
+                    TableOperationStatus.TableNotFound
+                );
 
-            var updatedTable = new TableResponse
-            (
-                id,
-                request.RestaurantId,
-                request.Number,
-                request.Capacity,
-                request.IsActive
+            var restaurantExists = await _dbContext.Restaurants
+                    .AnyAsync(restaurant => restaurant.Id == request.RestaurantId);
+
+            if (!restaurantExists)
+                return new TableOperationResult(
+                    TableOperationStatus.RestaurantNotFound
+                );
+
+            var numberExists =
+                await _dbContext.Tables
+                    .AnyAsync(otherTable =>
+                        otherTable.RestaurantId == request.RestaurantId
+                        && otherTable.Number == request.Number
+                        && otherTable.Id != id
+                    );
+
+            if (numberExists)
+            {
+                return new TableOperationResult(
+                    TableOperationStatus
+                        .DuplicateNumber
+                );
+            }
+
+            table.RestaurantId = request.RestaurantId;
+            table.Number = request.Number;
+            table.Capacity = request.Capacity;
+            table.IsActive = request.IsActive;
+
+            await _dbContext.SaveChangesAsync();
+
+            return new TableOperationResult(
+                TableOperationStatus.Success,
+                ToResponse(table)
             );
-
-            Tables[tableIndex] = updatedTable;
-
-            return updatedTable;
         }
 
-        public bool Delete(int id)
+        public async Task<bool> DeleteAsync(int id)
         {
-            var table = Tables.FirstOrDefault(t => t.Id == id);
+            var table = await _dbContext.Tables.FindAsync(id);
 
             if (table is null)
                 return false;
 
-            Tables.Remove(table);
+            _dbContext.Tables.Remove(table);
+            await _dbContext.SaveChangesAsync();
 
             return true;
         }
