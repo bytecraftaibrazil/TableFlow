@@ -4,7 +4,7 @@ namespace TableFlow.Api.DTOs
         int Id,
         int RestaurantId,
         int TableId,
-        string CustomeName,
+        string CustomerName,
         DateTime ReservationDate,
         int PartySize,
         string Status

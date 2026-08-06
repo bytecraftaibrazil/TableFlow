@@ -1,25 +1,28 @@
 using TableFlow.Api.DTOs;
+using TableFlow.Api.Models;
 
 namespace TableFlow.Api.Interfaces
 {
     public interface IReservationService
     {
-        IReadOnlyList<ReservationResponse> GetAll();
+        Task<IReadOnlyList<ReservationResponse>> GetAllAsync();
 
-        ReservationResponse? GetById(int id);
+        Task<ReservationResponse?> GetByIdAsync(int id);
 
-        IReadOnlyList<ReservationResponse> GetByRestaurantId(int restaurantId);
+        Task<IReadOnlyList<ReservationResponse>> GetByRestaurantIdAsync(int restaurantId);
 
-        IReadOnlyList<ReservationResponse> GetByTableId(int tableId);
+        Task<IReadOnlyList<ReservationResponse>> GetByTableIdAsync(int tableId);
 
-        ReservationResponse Create(CreateReservationRequest request);
+        Task<IReadOnlyList<ReservationResponse>> GetFutureReservationsAsync();
 
-        ReservationResponse? Update(int id, UpdateReservationRequest request);
+        Task<ReservationOperationResult> CreateAsync(CreateReservationRequest request);
 
-        ReservationResponse? Cancel(int id);
+        Task<ReservationResponse?> UpdateAsync(int id, UpdateReservationRequest request);
 
-        ReservationResponse? Confirm(int id);
+        Task<ReservationResponse?> CancelAsync(int id);
 
-        IReadOnlyList<ReservationResponse> GetByStatus(string status);
+        Task<ReservationResponse?> ConfirmAsync(int id);
+
+        Task<IReadOnlyList<ReservationResponse>> GetByStatusAsync(string status);
     }
 }

@@ -1,169 +1,203 @@
+using Microsoft.EntityFrameworkCore;
+using TableFlow.Api.Data;
 using TableFlow.Api.DTOs;
+using TableFlow.Api.Entities;
 using TableFlow.Api.Interfaces;
+using TableFlow.Api.Models;
 
 namespace TableFlow.Api.Services
 {
     public class ReservationService : IReservationService
     {
-        private static readonly List<ReservationResponse> Reservations = [
-            new(
-            1,
-            1,
-            1,
-            "Ana Souza",
-            new DateTime(2026, 7, 25, 19, 0, 0),
-            4,
-            "Confirmed"
-            ),
-            new(
-                2,
-                1,
-                2,
-                "Carlos Lima",
-                new DateTime(2026, 7, 25, 20, 30, 0),
-                2,
-                "Pending"
-            ),
-            new(
-                3,
-                2,
-                4,
-                "Mariana Alves",
-                new DateTime(2026, 7, 26, 18, 30, 0),
-                4,
-                "Confirmed"
-            ),
-            new(
-                4,
-                3,
-                6,
-                "Lucas Rocha",
-                new DateTime(2026, 7, 27, 21, 0, 0),
-                2,
-                "Cancelled"
-            ),
-            new(
-                5,
-                2,
-                5,
-                "Fernanda Costa",
-                new DateTime(2026, 7, 28, 20, 0, 0),
-                6,
-                "Pending"
-            )
-        ];
+        private readonly TableFlowDbContext _dbContext;
 
-        public IReadOnlyList<ReservationResponse> GetAll()
+        public ReservationService(
+            TableFlowDbContext dbContext)
         {
-            return Reservations;
+            _dbContext = dbContext;
         }
 
-        public ReservationResponse? GetById(int id)
+        private static ReservationResponse ToResponse(
+           Reservation reservation)
         {
-            return Reservations.FirstOrDefault(r => r.Id == id);
-        }
-
-        public IReadOnlyList<ReservationResponse> GetByRestaurantId(int restaurantId)
-        {
-            return Reservations.Where(r => r.RestaurantId == restaurantId).ToList();
-        }
-
-        public IReadOnlyList<ReservationResponse> GetByStatus(string status)
-        {
-            return Reservations.Where(r => r.Status.Equals(status, StringComparison.OrdinalIgnoreCase)).ToList();
-        }
-
-        public IReadOnlyList<ReservationResponse> GetByTableId(int tableId)
-        {
-            return Reservations.Where(r => r.TableId == tableId).ToList();
-        }
-
-        public ReservationResponse Create(CreateReservationRequest request)
-        {
-            var nextId = Reservations.Count == 0 ? 1 : Reservations.Max(r => r.Id) + 1;
-
-            var reservation = new ReservationResponse(
-                nextId,
-                request.RestaurantId,
-                request.TableId,
-                request.CustomerName.Trim(),
-                request.ReservationDate,
-                request.PartySize,
-                "Peding"
+            return new ReservationResponse(
+                reservation.Id,
+                reservation.RestaurantId,
+                reservation.TableId,
+                reservation.CustomerName,
+                reservation.ReservationDate,
+                reservation.PartySize,
+                reservation.Status
             );
-
-            Reservations.Add(reservation);
-
-            return reservation;
         }
 
-        public ReservationResponse? Update(int id, UpdateReservationRequest request)
+        public async Task<IReadOnlyList<ReservationResponse>> GetAllAsync()
         {
-            var reservationIndex = Reservations.FindIndex(r => r.Id == id);
+            var reservations = await _dbContext.Reservations
+                .AsNoTracking()
+                .OrderBy(reservation => reservation.ReservationDate)
+                .ThenBy(reservation => reservation.Id).ToListAsync();
 
-            if (reservationIndex == -1)
-                return null;
+            return reservations.Select(ToResponse).ToList();
 
-            var currentReservation = Reservations[reservationIndex];
 
-            var updatedReservation = new ReservationResponse
-            (
-                currentReservation.Id,
-                request.RestaurantId,
-                request.TableId,
-                request.CustomerName.Trim(),
-                request.ReservationDate,
-                request.PartySize,
-                currentReservation.Status
-            );
-
-            Reservations[reservationIndex] = updatedReservation;
-
-            return updatedReservation;
         }
 
-        public ReservationResponse? Cancel(int id)
+        public async Task<ReservationResponse?> GetByIdAsync(int id)
         {
-            var reservationIndex = Reservations.FindIndex(r => r.Id == id);
+            var reservation = await _dbContext.Reservations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(reservation => reservation.Id == id);
 
-            if (reservationIndex == -1)
-                return null;
+            return reservation is null ? null : ToResponse(reservation);
+        }
 
-            var currentReservation = Reservations[reservationIndex];
+        public async Task<IReadOnlyList<ReservationResponse>> GetByRestaurantIdAsync(int restaurantId)
+        {
+            var reservations = await _dbContext.Reservations
+                    .AsNoTracking()
+                    .Where(reservation => reservation.RestaurantId == restaurantId)
+                    .OrderBy(reservation => reservation.ReservationDate)
+                    .ToListAsync();
 
-            if (currentReservation.Status == "Cancelled")
-                return currentReservation;
+            return reservations.Select(ToResponse).ToList();
+        }
 
-            var cancellReservation = currentReservation with
+        public async Task<IReadOnlyList<ReservationResponse>> GetByTableIdAsync(int tableId)
+        {
+            var reservations = await _dbContext.Reservations
+                    .AsNoTracking()
+                    .Where(reservation => reservation.TableId == tableId)
+                    .OrderBy(reservation => reservation.ReservationDate)
+                    .ToListAsync();
+
+            return reservations
+                .Select(ToResponse)
+                .ToList();
+        }
+
+        public async Task<IReadOnlyList<ReservationResponse>> GetByStatusAsync(string status)
+        {
+            var normalizedStatus = status.Trim();
+
+            var reservations = await _dbContext.Reservations
+                    .AsNoTracking()
+                    .Where(reservation => reservation.Status == normalizedStatus)
+                    .OrderBy(reservation => reservation.ReservationDate)
+                    .ToListAsync();
+
+            return reservations.Select(ToResponse).ToList();
+        }
+
+        public async Task<IReadOnlyList<ReservationResponse>> GetFutureReservationsAsync()
+        {
+            var reservations = await _dbContext.Reservations
+                .AsNoTracking()
+                .Where(reservation => reservation.ReservationDate > DateTime.Now)
+                .OrderBy(reservation => reservation.ReservationDate)
+                .ToListAsync();
+
+            return reservations.Select(ToResponse).ToList();
+        }
+
+
+        public async Task<ReservationOperationResult> CreateAsync(CreateReservationRequest request)
+        {
+            var restaurantExists = await _dbContext.Restaurants
+                .AnyAsync(restaurant => restaurant.Id == request.RestaurantId);
+
+            if (!restaurantExists)
             {
-                Status = "Cancelled"
+                return new ReservationOperationResult(ReservationOperationStatus.RestaurantNotFound);
+            }
+
+            var tableRelation = await _dbContext.Tables
+                    .AsNoTracking()
+                    .Where(table => table.Id == request.TableId)
+                    .Select(table => new
+                    {
+                        table.Id,
+                        table.RestaurantId
+                    }).FirstOrDefaultAsync();
+
+            if (tableRelation is null)
+            {
+                return new ReservationOperationResult(ReservationOperationStatus.TableNotFound);
+            }
+
+            if (tableRelation.RestaurantId != request.RestaurantId)
+            {
+                return new ReservationOperationResult(ReservationOperationStatus.TableDoesNotBelongToRestaurant);
+            }
+
+            var reservation = new Reservation
+            {
+                RestaurantId = request.RestaurantId,
+                TableId = request.TableId,
+                CustomerName = request.CustomerName.Trim(),
+                ReservationDate = request.ReservationDate,
+                PartySize = request.PartySize,
+                Status = "Pending"
             };
 
-            Reservations[reservationIndex] = cancellReservation;
+            await _dbContext.Reservations.AddAsync(reservation);
+            await _dbContext.SaveChangesAsync();
 
-            return cancellReservation;
+            return new ReservationOperationResult(
+                ReservationOperationStatus.Success,
+                ToResponse(reservation)
+            );
         }
 
-        public ReservationResponse? Confirm(int id)
+        public async Task<ReservationResponse?> UpdateAsync(int id, UpdateReservationRequest request)
         {
-            var reservationIndex = Reservations.FindIndex(r => r.Id == id);
+            var reservation = await _dbContext.Reservations.FindAsync(id);
 
-            if (reservationIndex == -1)
+            if (reservation is null)
                 return null;
 
-            var currentReservation = Reservations[reservationIndex];
+            reservation.RestaurantId = request.RestaurantId;
 
-            if (currentReservation.Status == "Confirmed")
-                return currentReservation;
+            reservation.TableId = request.TableId;
 
-            var cancellReservation = currentReservation with
-            {
-                Status = "Confirmed"
-            };
+            reservation.CustomerName = request.CustomerName.Trim();
 
-            Reservations[reservationIndex] = cancellReservation;
+            reservation.ReservationDate = request.ReservationDate;
 
-            return cancellReservation;
+            reservation.PartySize = request.PartySize;
+
+            await _dbContext.SaveChangesAsync();
+
+            return ToResponse(reservation);
+        }
+
+
+        public async Task<ReservationResponse?> CancelAsync(int id)
+        {
+            var reservation = await _dbContext.Reservations.FindAsync(id);
+
+            if (reservation is null)
+                return null;
+
+            reservation.Status = "Cancelled";
+
+            await _dbContext.SaveChangesAsync();
+
+            return ToResponse(reservation);
+        }
+
+        public async Task<ReservationResponse?> ConfirmAsync(int id)
+        {
+            var reservation = await _dbContext.Reservations.FindAsync(id);
+
+            if (reservation is null)
+                return null;
+
+            reservation.Status = "Confirmed";
+
+            await _dbContext.SaveChangesAsync();
+
+            return ToResponse(reservation);
         }
     }
 }
