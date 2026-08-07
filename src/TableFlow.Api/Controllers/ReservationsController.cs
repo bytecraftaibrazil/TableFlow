@@ -290,6 +290,10 @@ namespace TableFlow.Api.Controllers
             typeof(ProblemDetails),
             StatusCodes.Status404NotFound
         )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status409Conflict
+        )]
         public async Task<ActionResult<ReservationResponse>> Update(int id, UpdateReservationRequest request)
         {
             if (id <= 0)
@@ -318,9 +322,9 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
-            var reservation = await _reservationService.UpdateAsync(id, request);
+            var result = await _reservationService.UpdateAsync(id, request);
 
-            if (reservation is null)
+            if (result.Status == ReservationOperationStatus.ReservationNotFound)
             {
                 return Problem(
                     statusCode: StatusCodes.Status404NotFound,
@@ -329,7 +333,45 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
-            return Ok(reservation);
+            if (result.Status == ReservationOperationStatus.RestaurantNotFound)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Restaurant not found",
+                    detail: $"Restaurant with id {request.RestaurantId} was not found."
+                );
+            }
+
+            if (result.Status == ReservationOperationStatus.TableNotFound)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Table not found",
+                    detail: $"Table with id {request.TableId} was not found."
+                );
+            }
+
+            if (result.Status == ReservationOperationStatus.CancelledReservationCannotBeUpdated)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Invalid Operation",
+                    detail: "A cancelled reservation cannot be updated."
+                );
+            }
+
+            if (result.Status == ReservationOperationStatus.TableDoesNotBelongToRestaurant)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Invalid table relationship",
+                    detail:
+                        $"Table with id {request.TableId} does not belong "
+                        + $"to restaurant {request.RestaurantId}."
+                );
+            }
+
+            return Ok(result.Reservation);
         }
 
         [HttpPut("{id:int}/cancel")]
@@ -356,9 +398,9 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
-            var reservation = await _reservationService.CancelAsync(id);
+            var result = await _reservationService.CancelAsync(id);
 
-            if (reservation is null)
+            if (result.Status == ReservationOperationStatus.ReservationNotFound)
             {
                 return Problem(
                     statusCode: StatusCodes.Status404NotFound,
@@ -367,7 +409,7 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
-            return Ok(reservation);
+            return Ok(result.Reservation);
         }
 
         [HttpPut("{id:int}/confirm")]
@@ -383,6 +425,10 @@ namespace TableFlow.Api.Controllers
             typeof(ProblemDetails),
             StatusCodes.Status404NotFound
         )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status409Conflict
+        )]
         public async Task<ActionResult<ReservationResponse>> Confim(int id)
         {
             if (id <= 0)
@@ -394,9 +440,9 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
-            var reservation = await _reservationService.ConfirmAsync(id);
+            var result = await _reservationService.ConfirmAsync(id);
 
-            if (reservation is null)
+            if (result.Status == ReservationOperationStatus.ReservationNotFound)
             {
                 return Problem(
                     statusCode: StatusCodes.Status404NotFound,
@@ -405,7 +451,16 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
-            return Ok(reservation);
+            if (result.Status == ReservationOperationStatus.InvalidStatusTransition)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Invalid reservation status transition",
+                    detail: "A cancelled reservation cannot be confirmed."
+                );
+            }
+
+            return Ok(result.Reservation);
         }
         #endregion
 

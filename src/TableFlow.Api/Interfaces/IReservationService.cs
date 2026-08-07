@@ -15,14 +15,14 @@ namespace TableFlow.Api.Interfaces
 
         Task<IReadOnlyList<ReservationResponse>> GetFutureReservationsAsync();
 
+        Task<IReadOnlyList<ReservationResponse>> GetByStatusAsync(string status);
+
         Task<ReservationOperationResult> CreateAsync(CreateReservationRequest request);
 
-        Task<ReservationResponse?> UpdateAsync(int id, UpdateReservationRequest request);
+        Task<ReservationOperationResult> UpdateAsync(int id, UpdateReservationRequest request);
 
-        Task<ReservationResponse?> CancelAsync(int id);
+        Task<ReservationOperationResult> CancelAsync(int id);
 
-        Task<ReservationResponse?> ConfirmAsync(int id);
-
-        Task<IReadOnlyList<ReservationResponse>> GetByStatusAsync(string status);
+        Task<ReservationOperationResult> ConfirmAsync(int id);
     }
 }

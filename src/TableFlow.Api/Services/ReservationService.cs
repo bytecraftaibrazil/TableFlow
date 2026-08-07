@@ -31,6 +31,31 @@ namespace TableFlow.Api.Services
             );
         }
 
+        private async Task<ReservationOperationStatus> ValidateRelationshipAsync(
+            int restaurantId,
+            int tableId)
+        {
+            var restaurantExists = await _dbContext.Restaurants
+                .AnyAsync(restaurant => restaurant.Id == restaurantId);
+
+            if (!restaurantExists)
+                return ReservationOperationStatus.RestaurantNotFound;
+
+            var tableRestaurantId = await _dbContext.Tables
+                .AsNoTracking()
+                .Where(table => table.Id == tableId)
+                .Select(table => (int?)table.RestaurantId)
+                .FirstOrDefaultAsync();
+
+            if (tableRestaurantId is null)
+                return ReservationOperationStatus.TableNotFound;
+
+            if (tableRestaurantId.Value != restaurantId)
+                return ReservationOperationStatus.TableDoesNotBelongToRestaurant;
+
+            return ReservationOperationStatus.Success;
+        }
+
         public async Task<IReadOnlyList<ReservationResponse>> GetAllAsync()
         {
             var reservations = await _dbContext.Reservations
@@ -103,32 +128,10 @@ namespace TableFlow.Api.Services
 
         public async Task<ReservationOperationResult> CreateAsync(CreateReservationRequest request)
         {
-            var restaurantExists = await _dbContext.Restaurants
-                .AnyAsync(restaurant => restaurant.Id == request.RestaurantId);
+            var relationshipStatus = await ValidateRelationshipAsync(request.RestaurantId, request.TableId);
 
-            if (!restaurantExists)
-            {
-                return new ReservationOperationResult(ReservationOperationStatus.RestaurantNotFound);
-            }
-
-            var tableRelation = await _dbContext.Tables
-                    .AsNoTracking()
-                    .Where(table => table.Id == request.TableId)
-                    .Select(table => new
-                    {
-                        table.Id,
-                        table.RestaurantId
-                    }).FirstOrDefaultAsync();
-
-            if (tableRelation is null)
-            {
-                return new ReservationOperationResult(ReservationOperationStatus.TableNotFound);
-            }
-
-            if (tableRelation.RestaurantId != request.RestaurantId)
-            {
-                return new ReservationOperationResult(ReservationOperationStatus.TableDoesNotBelongToRestaurant);
-            }
+            if (relationshipStatus != ReservationOperationStatus.Success)
+                return new ReservationOperationResult(relationshipStatus);
 
             var reservation = new Reservation
             {
@@ -149,12 +152,20 @@ namespace TableFlow.Api.Services
             );
         }
 
-        public async Task<ReservationResponse?> UpdateAsync(int id, UpdateReservationRequest request)
+        public async Task<ReservationOperationResult> UpdateAsync(int id, UpdateReservationRequest request)
         {
             var reservation = await _dbContext.Reservations.FindAsync(id);
 
             if (reservation is null)
-                return null;
+                return new ReservationOperationResult(ReservationOperationStatus.ReservationNotFound);
+
+            if (reservation.Status == "Cancelled")
+                return new ReservationOperationResult(
+                    ReservationOperationStatus.CancelledReservationCannotBeUpdated);
+            var relationshipStatus = await ValidateRelationshipAsync(request.RestaurantId, request.TableId);
+
+            if (relationshipStatus != ReservationOperationStatus.Success)
+                return new ReservationOperationResult(relationshipStatus);
 
             reservation.RestaurantId = request.RestaurantId;
 
@@ -168,36 +179,59 @@ namespace TableFlow.Api.Services
 
             await _dbContext.SaveChangesAsync();
 
-            return ToResponse(reservation);
+            return new ReservationOperationResult(
+                    ReservationOperationStatus.Success,
+                    ToResponse(reservation)
+                );
         }
 
 
-        public async Task<ReservationResponse?> CancelAsync(int id)
+        public async Task<ReservationOperationResult> CancelAsync(int id)
         {
             var reservation = await _dbContext.Reservations.FindAsync(id);
 
             if (reservation is null)
-                return null;
+                return new ReservationOperationResult(ReservationOperationStatus.ReservationNotFound);
+
+            if (reservation.Status == "Cancelled")
+                return new ReservationOperationResult(ReservationOperationStatus.Success, ToResponse(reservation));
 
             reservation.Status = "Cancelled";
 
             await _dbContext.SaveChangesAsync();
 
-            return ToResponse(reservation);
+            return new ReservationOperationResult(
+                ReservationOperationStatus.Success,
+                ToResponse(reservation)
+            );
         }
 
-        public async Task<ReservationResponse?> ConfirmAsync(int id)
+        public async Task<ReservationOperationResult> ConfirmAsync(int id)
         {
             var reservation = await _dbContext.Reservations.FindAsync(id);
 
             if (reservation is null)
-                return null;
+                return new ReservationOperationResult(ReservationOperationStatus.ReservationNotFound);
+
+            if (reservation.Status == "Cancelled")
+                return new ReservationOperationResult(ReservationOperationStatus.InvalidStatusTransition);
+
+            if (reservation.Status == "Confirmed")
+            {
+                return new ReservationOperationResult(
+                    ReservationOperationStatus.Success,
+                    ToResponse(reservation)
+                );
+            }
 
             reservation.Status = "Confirmed";
 
             await _dbContext.SaveChangesAsync();
 
-            return ToResponse(reservation);
+            return new ReservationOperationResult(
+                ReservationOperationStatus.Success,
+                ToResponse(reservation)
+            );
         }
     }
 }
