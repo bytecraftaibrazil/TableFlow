@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TableFlow.Api.Data;
 
@@ -11,9 +12,11 @@ using TableFlow.Api.Data;
 namespace TableFlow.Api.Data.Migrations
 {
     [DbContext(typeof(TableFlowDbContext))]
-    partial class TableFlowDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260810183141_AddDataIntegrityConstraints")]
+    partial class AddDataIntegrityConstraints
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -124,8 +127,6 @@ namespace TableFlow.Api.Data.Migrations
 
                     b.ToTable("Tables", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Tables_Capacity_Maximum", "[Capacity] <= 50");
-
                             t.HasCheckConstraint("CK_Tables_Capacity_Positive", "[Capacity] > 0");
 
                             t.HasCheckConstraint("CK_Tables_Number_Positive", "[Number] > 0");

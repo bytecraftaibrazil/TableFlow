@@ -47,7 +47,25 @@ public class TableFlowDbContext : DbContext
 
         modelBuilder.Entity<RestaurantTable>(entity =>
         {
-            entity.ToTable("Tables");
+            entity.ToTable("Tables",
+                table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_Tables_Capacity_Positive",
+                        "[Capacity] > 0"
+                    );
+
+                    table.HasCheckConstraint(
+                        "CK_Tables_Number_Positive",
+                        "[Number] > 0"
+                    );
+
+                    table.HasCheckConstraint(
+                        "CK_Tables_Capacity_Maximum",
+                        "[Capacity] <= 50"
+                    );
+                }
+            );
 
             entity.HasKey(table =>
                 table.Id
@@ -63,7 +81,20 @@ public class TableFlowDbContext : DbContext
 
         modelBuilder.Entity<Reservation>(entity =>
         {
-            entity.ToTable("Reservations");
+            entity.ToTable("Reservations",
+                table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_Reservations_PartySize_Positive",
+                        "[PartySize] > 0"
+                    );
+
+                    table.HasCheckConstraint(
+                        "CK_Reservations_Status_Valid",
+                        "[Status] IN ('Pending', 'Confirmed', 'Cancelled')"
+                    );
+                }
+            );
 
             entity.HasKey(reservation =>
                 reservation.Id
