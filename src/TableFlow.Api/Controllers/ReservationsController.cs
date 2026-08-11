@@ -193,6 +193,30 @@ namespace TableFlow.Api.Controllers
             return Ok(reservations);
         }
 
+        [HttpGet("upcoming/confirmed")]
+        [ProducesResponseType(
+            typeof(IReadOnlyList<ReservationResponse>),
+            StatusCodes.Status200OK
+        )]
+        public async Task<ActionResult<IReadOnlyList<ReservationResponse>>> GetUpcomingConfirmed()
+        {
+            var reservations = await _reservationService.GetUpcomingConfirmedAsync();
+
+            return Ok(reservations);
+        }
+
+        [HttpGet("upcoming/pending")]
+        [ProducesResponseType(
+            typeof(IReadOnlyList<ReservationResponse>),
+            StatusCodes.Status200OK
+        )]
+        public async Task<ActionResult<IReadOnlyList<ReservationResponse>>> GetUpcomingPending()
+        {
+            var reservations = await _reservationService.GetUpcomingPendingAsync();
+
+            return Ok(reservations);
+        }
+
         #endregion
 
         #region Post

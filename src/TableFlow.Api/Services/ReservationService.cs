@@ -125,6 +125,43 @@ namespace TableFlow.Api.Services
             return reservations.Select(ToResponse).ToList();
         }
 
+        public async Task<IReadOnlyList<ReservationResponse>> GetUpcomingConfirmedAsync()
+        {
+            var query = _dbContext.Reservations
+                .AsNoTracking()
+                .Where(reservation =>
+                    reservation.Status == "Confirmed"
+                )
+                .Where(reservation =>
+                    reservation.ReservationDate > DateTime.Now
+                )
+                .OrderBy(reservation =>
+                    reservation.ReservationDate
+                );
+
+            var reservations = await query.ToListAsync();
+
+            return reservations.Select(ToResponse).ToList();
+        }
+
+        public async Task<IReadOnlyList<ReservationResponse>> GetUpcomingPendingAsync()
+        {
+            var query = _dbContext.Reservations
+                .AsNoTracking()
+                .Where(reservation =>
+                    reservation.Status == "Pending"
+                )
+                .Where(reservation =>
+                    reservation.ReservationDate > DateTime.Now
+                )
+                .OrderBy(reservation =>
+                    reservation.ReservationDate
+                );
+
+            var reservations = await query.ToListAsync();
+
+            return reservations.Select(ToResponse).ToList();
+        }
 
         public async Task<ReservationOperationResult> CreateAsync(CreateReservationRequest request)
         {
