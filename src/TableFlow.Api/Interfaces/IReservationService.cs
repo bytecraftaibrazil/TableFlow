@@ -21,6 +21,8 @@ namespace TableFlow.Api.Interfaces
 
         Task<IReadOnlyList<ReservationResponse>> GetUpcomingPendingAsync();
 
+        Task<IReadOnlyList<ReservationResponse>> SearchAsync(ReservationFilterRequest request);
+
         Task<ReservationOperationResult> CreateAsync(CreateReservationRequest request);
 
         Task<ReservationOperationResult> UpdateAsync(int id, UpdateReservationRequest request);

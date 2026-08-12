@@ -217,6 +217,34 @@ namespace TableFlow.Api.Controllers
             return Ok(reservations);
         }
 
+        [HttpGet("search")]
+        [ProducesResponseType(
+            typeof(IReadOnlyList<ReservationResponse>),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
+        public async Task<ActionResult<IReadOnlyList<ReservationResponse>>> Search(
+            [FromQuery] ReservationFilterRequest request)
+        {
+            if (request.FromDate.HasValue
+                && request.ToDate.HasValue
+                && request.FromDate.Value > request.ToDate.Value)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid reservation period",
+                    detail: "FromDate cannot be greater than ToDate."
+                );
+            }
+
+            var reservations = await _reservationService.SearchAsync(request);
+
+            return Ok(reservations);
+        }
+
         #endregion
 
         #region Post

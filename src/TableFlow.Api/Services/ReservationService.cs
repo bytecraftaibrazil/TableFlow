@@ -163,6 +163,62 @@ namespace TableFlow.Api.Services
             return reservations.Select(ToResponse).ToList();
         }
 
+        public async Task<IReadOnlyList<ReservationResponse>> SearchAsync(ReservationFilterRequest request)
+        {
+            var query = _dbContext.Reservations
+                .AsNoTracking();
+
+            if (!string.IsNullOrWhiteSpace(request.Status))
+            {
+                var status = request.Status.Trim();
+
+                query = query.Where(reservation => reservation.Status == status);
+            }
+
+            if (request.RestaurantId.HasValue)
+            {
+                query = query.Where(reservation => reservation.RestaurantId == request.RestaurantId.Value);
+            }
+
+            if (request.TableId.HasValue)
+            {
+                query = query.Where(reservation => reservation.TableId == request.TableId.Value);
+            }
+
+            if (request.MinimumPartySize.HasValue)
+            {
+                query = query.Where(reservation => reservation.PartySize >= request.MinimumPartySize.Value);
+            }
+
+            if (request.FromDate.HasValue)
+            {
+                query = query.Where(reservation => reservation.ReservationDate >= request.FromDate.Value);
+            }
+
+            if (request.ToDate.HasValue)
+            {
+                query = query.Where(reservation => reservation.ReservationDate <= request.ToDate.Value);
+            }
+
+            query = request.Descending
+                ? query.OrderByDescending(reservation => reservation.ReservationDate)
+                : query.OrderBy(reservation => reservation.ReservationDate);
+
+            var projectedQuery = query.Select(reservation =>
+                new ReservationResponse(
+                    reservation.Id,
+                    reservation.RestaurantId,
+                    reservation.TableId,
+                    reservation.CustomerName,
+                    reservation.ReservationDate,
+                    reservation.PartySize,
+                    reservation.Status
+                )
+            );
+
+            return await projectedQuery.ToListAsync();
+        }
+
         public async Task<ReservationOperationResult> CreateAsync(CreateReservationRequest request)
         {
             var relationshipStatus = await ValidateRelationshipAsync(request.RestaurantId, request.TableId);
