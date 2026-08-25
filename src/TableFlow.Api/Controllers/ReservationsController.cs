@@ -219,18 +219,17 @@ namespace TableFlow.Api.Controllers
 
         [HttpGet("search")]
         [ProducesResponseType(
-            typeof(IReadOnlyList<ReservationResponse>),
-            StatusCodes.Status200OK
-        )]
+    typeof(PagedResult<ReservationResponse>),
+    StatusCodes.Status200OK
+)]
         [ProducesResponseType(
-            typeof(ProblemDetails),
-            StatusCodes.Status400BadRequest
-        )]
-        public async Task<ActionResult<IReadOnlyList<ReservationResponse>>> Search(
+    typeof(ProblemDetails),
+    StatusCodes.Status400BadRequest
+)]
+        public async Task<ActionResult<PagedResult<ReservationResponse>>> Search(
             [FromQuery] ReservationFilterRequest request)
         {
-            if (request.FromDate.HasValue
-                && request.ToDate.HasValue
+            if (request.FromDate.HasValue && request.ToDate.HasValue
                 && request.FromDate.Value > request.ToDate.Value)
             {
                 return Problem(
@@ -240,9 +239,30 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
-            var reservations = await _reservationService.SearchAsync(request);
+            if (request.PageNumber < 1)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid page number",
+                    detail: "PageNumber must be greater than zero."
+                );
+            }
 
-            return Ok(reservations);
+            if (
+                request.PageSize < 1
+                || request.PageSize > 100
+            )
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid page size",
+                    detail: "PageSize must be between 1 and 100."
+                );
+            }
+
+            var result = await _reservationService.SearchAsync(request);
+
+            return Ok(result);
         }
 
         #endregion

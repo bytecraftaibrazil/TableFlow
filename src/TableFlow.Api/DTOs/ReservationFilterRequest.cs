@@ -7,6 +7,8 @@ namespace TableFlow.Api.DTOs
         DateTime? FromDate,
         DateTime? ToDate,
         int? MinimumPartySize,
-        bool Descending = false
+        bool Descending = false,
+        int PageNumber = 1,
+        int PageSize = 20
     );
 }

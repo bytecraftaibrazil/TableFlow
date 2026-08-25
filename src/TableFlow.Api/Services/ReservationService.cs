@@ -163,7 +163,8 @@ namespace TableFlow.Api.Services
             return reservations.Select(ToResponse).ToList();
         }
 
-        public async Task<IReadOnlyList<ReservationResponse>> SearchAsync(ReservationFilterRequest request)
+        public async Task<PagedResult<ReservationResponse>> SearchAsync(
+            ReservationFilterRequest request)
         {
             var query = _dbContext.Reservations
                 .AsNoTracking();
@@ -200,23 +201,43 @@ namespace TableFlow.Api.Services
                 query = query.Where(reservation => reservation.ReservationDate <= request.ToDate.Value);
             }
 
+            var totalCount = await query.CountAsync();
+
             query = request.Descending
                 ? query.OrderByDescending(reservation => reservation.ReservationDate)
-                : query.OrderBy(reservation => reservation.ReservationDate);
+                    .ThenByDescending(reservation => reservation.Id)
+                : query.OrderBy(reservation => reservation.ReservationDate)
+                    .ThenBy(reservation => reservation.Id);
 
-            var projectedQuery = query.Select(reservation =>
-                new ReservationResponse(
-                    reservation.Id,
-                    reservation.RestaurantId,
-                    reservation.TableId,
-                    reservation.CustomerName,
-                    reservation.ReservationDate,
-                    reservation.PartySize,
-                    reservation.Status
+            var skip = (request.PageNumber - 1) * request.PageSize;
+
+            var items = await query
+                .Skip(skip)
+                .Take(request.PageSize)
+                .Select(reservation =>
+                    new ReservationResponse(
+                        reservation.Id,
+                        reservation.RestaurantId,
+                        reservation.TableId,
+                        reservation.CustomerName,
+                        reservation.ReservationDate,
+                        reservation.PartySize,
+                        reservation.Status
+                    )
                 )
-            );
+                .ToListAsync();
 
-            return await projectedQuery.ToListAsync();
+            var totalPages = (int)Math.Ceiling(totalCount / (double)request.PageSize);
+            var hasNextPage = request.PageNumber < totalPages;
+
+            return new PagedResult<ReservationResponse>(
+                items,
+                request.PageNumber,
+                request.PageSize,
+                totalCount,
+                totalPages,
+                hasNextPage
+            );
         }
 
         public async Task<ReservationOperationResult> CreateAsync(CreateReservationRequest request)
