@@ -116,6 +116,24 @@ public class TableFlowDbContext : DbContext
             )
             .IsRequired()
             .HasMaxLength(30);
+
+            entity.HasIndex(reservation => new
+            {
+                reservation.Status,
+                reservation.ReservationDate
+            })
+            .HasDatabaseName(
+                "IX_Reservations_Status_ReservationDate"
+            );
+
+            entity.HasIndex(reservation => new
+            {
+                reservation.RestaurantId,
+                reservation.ReservationDate
+            })
+            .HasDatabaseName(
+                "IX_Reservations_RestaurantId_ReservationDate"
+            );
         });
 
         modelBuilder.Entity<RestaurantTable>()
