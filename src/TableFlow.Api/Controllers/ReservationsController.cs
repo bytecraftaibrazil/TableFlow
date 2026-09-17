@@ -78,10 +78,6 @@ namespace TableFlow.Api.Controllers
             typeof(ProblemDetails),
             StatusCodes.Status400BadRequest
         )]
-        [ProducesResponseType(
-            typeof(ProblemDetails),
-            StatusCodes.Status404NotFound
-        )]
         public async Task<ActionResult<IReadOnlyList<ReservationResponse>>> GetByRestaurantId(int restaurantId)
         {
             if (restaurantId <= 0)
