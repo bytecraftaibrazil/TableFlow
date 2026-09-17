@@ -82,6 +82,7 @@ namespace TableFlow.Api.Services
         public async Task<IReadOnlyList<TableResponse>> GetActiveAsync()
         {
             return await _dbContext.Tables
+                .AsNoTracking()
                 .Where(table => table.IsActive)
                 .OrderBy(table => table.RestaurantId)
                 .ThenBy(table => table.Number)

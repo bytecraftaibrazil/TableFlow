@@ -95,16 +95,6 @@ namespace TableFlow.Api.Controllers
 
             var reservations = await _reservationService.GetByRestaurantIdAsync(restaurantId);
 
-            if (reservations is null)
-            {
-                return Problem(
-                    statusCode: StatusCodes.Status404NotFound,
-                    title: "Reservations not found",
-                    detail:
-                        $"No reservations were found for restaurant with id {restaurantId}."
-                );
-            }
-
             return Ok(reservations);
         }
 
@@ -116,10 +106,6 @@ namespace TableFlow.Api.Controllers
         [ProducesResponseType(
             typeof(ProblemDetails),
             StatusCodes.Status400BadRequest
-        )]
-        [ProducesResponseType(
-            typeof(ProblemDetails),
-            StatusCodes.Status404NotFound
         )]
         public async Task<ActionResult<IReadOnlyList<ReservationResponse>>> GetByTableId(int tableId)
         {
@@ -134,15 +120,6 @@ namespace TableFlow.Api.Controllers
 
             var reservations = await _reservationService.GetByTableIdAsync(tableId);
 
-            if (reservations is null)
-            {
-                return Problem(
-                    statusCode: StatusCodes.Status404NotFound,
-                    title: "Reservations not found",
-                    detail: $"No reservations were found for table with id {tableId}."
-                );
-            }
-
             return Ok(reservations);
         }
 
@@ -156,27 +133,18 @@ namespace TableFlow.Api.Controllers
             typeof(ProblemDetails),
             StatusCodes.Status400BadRequest
         )]
-        [ProducesResponseType(
-            typeof(ProblemDetails),
-            StatusCodes.Status404NotFound
-        )]
         public async Task<ActionResult<IReadOnlyList<ReservationResponse>>> GetByStatus(string? status)
         {
             if (string.IsNullOrWhiteSpace(status))
+            {
                 return Problem(
                     statusCode: StatusCodes.Status400BadRequest,
                     title: "Invalid status filter",
                     detail: "Status type is required."
                 );
+            }
 
             var reservations = await _reservationService.GetByStatusAsync(status);
-
-            if (reservations is null)
-                return Problem(
-                    statusCode: StatusCodes.Status404NotFound,
-                    title: "Reservations not found",
-                    detail: $"No reservations were found with status '{status}'."
-                );
 
             return Ok(reservations);
         }
@@ -219,13 +187,13 @@ namespace TableFlow.Api.Controllers
 
         [HttpGet("search")]
         [ProducesResponseType(
-    typeof(PagedResult<ReservationResponse>),
-    StatusCodes.Status200OK
-)]
+            typeof(PagedResult<ReservationResponse>),
+            StatusCodes.Status200OK
+        )]
         [ProducesResponseType(
-    typeof(ProblemDetails),
-    StatusCodes.Status400BadRequest
-)]
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
         public async Task<ActionResult<PagedResult<ReservationResponse>>> Search(
             [FromQuery] ReservationFilterRequest request)
         {
@@ -501,7 +469,7 @@ namespace TableFlow.Api.Controllers
             typeof(ProblemDetails),
             StatusCodes.Status409Conflict
         )]
-        public async Task<ActionResult<ReservationResponse>> Confim(int id)
+        public async Task<ActionResult<ReservationResponse>> Confirm(int id)
         {
             if (id <= 0)
             {
