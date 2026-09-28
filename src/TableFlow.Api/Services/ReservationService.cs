@@ -10,11 +10,14 @@ namespace TableFlow.Api.Services
     public class ReservationService : IReservationService
     {
         private readonly TableFlowDbContext _dbContext;
+        private readonly IReservationEngine _reservationEngine;
 
         public ReservationService(
-            TableFlowDbContext dbContext)
+            TableFlowDbContext dbContext,
+            IReservationEngine reservationEngine)
         {
             _dbContext = dbContext;
+            _reservationEngine = reservationEngine;
         }
 
         private static ReservationResponse ToResponse(
@@ -31,29 +34,22 @@ namespace TableFlow.Api.Services
             );
         }
 
-        private async Task<ReservationOperationStatus> ValidateRelationshipAsync(
-            int restaurantId,
-            int tableId)
+        private static ReservationOperationStatus MapValidationStatus(ReservationValidationStatus status)
         {
-            var restaurantExists = await _dbContext.Restaurants
-                .AnyAsync(restaurant => restaurant.Id == restaurantId);
+            return status switch
+            {
+                ReservationValidationStatus.RestaurantNotFound =>
+                    ReservationOperationStatus.RestaurantNotFound,
 
-            if (!restaurantExists)
-                return ReservationOperationStatus.RestaurantNotFound;
+                ReservationValidationStatus.TableNotFound =>
+                    ReservationOperationStatus.TableNotFound,
 
-            var tableRestaurantId = await _dbContext.Tables
-                .AsNoTracking()
-                .Where(table => table.Id == tableId)
-                .Select(table => (int?)table.RestaurantId)
-                .FirstOrDefaultAsync();
+                ReservationValidationStatus.TableDoesNotBelongToRestaurant =>
+                    ReservationOperationStatus.TableDoesNotBelongToRestaurant,
 
-            if (tableRestaurantId is null)
-                return ReservationOperationStatus.TableNotFound;
-
-            if (tableRestaurantId.Value != restaurantId)
-                return ReservationOperationStatus.TableDoesNotBelongToRestaurant;
-
-            return ReservationOperationStatus.Success;
+                _ =>
+                    ReservationOperationStatus.Success
+            };
         }
 
         public async Task<IReadOnlyList<ReservationResponse>> GetAllAsync()
@@ -242,10 +238,23 @@ namespace TableFlow.Api.Services
 
         public async Task<ReservationOperationResult> CreateAsync(CreateReservationRequest request)
         {
-            var relationshipStatus = await ValidateRelationshipAsync(request.RestaurantId, request.TableId);
+            var candidate = new ReservationCandidate(
+                request.RestaurantId,
+                request.TableId,
+                request.PartySize,
+                request.ReservationDate
+            );
 
-            if (relationshipStatus != ReservationOperationStatus.Success)
-                return new ReservationOperationResult(relationshipStatus);
+            var validationResult = await _reservationEngine.ValidateAsync(candidate);
+
+            if (!validationResult.IsSuccess)
+            {
+                return new ReservationOperationResult(
+                    MapValidationStatus(
+                        validationResult.Status
+                    )
+                );
+            }
 
             var reservation = new Reservation
             {
@@ -276,10 +285,26 @@ namespace TableFlow.Api.Services
             if (reservation.Status == "Cancelled")
                 return new ReservationOperationResult(
                     ReservationOperationStatus.CancelledReservationCannotBeUpdated);
-            var relationshipStatus = await ValidateRelationshipAsync(request.RestaurantId, request.TableId);
+            var candidate = new ReservationCandidate(
+                request.RestaurantId,
+                request.TableId,
+                request.PartySize,
+                request.ReservationDate
+            );
 
-            if (relationshipStatus != ReservationOperationStatus.Success)
-                return new ReservationOperationResult(relationshipStatus);
+            var validationResult =
+                await _reservationEngine.ValidateAsync(
+                    candidate
+                );
+
+            if (!validationResult.IsSuccess)
+            {
+                return new ReservationOperationResult(
+                    MapValidationStatus(
+                        validationResult.Status
+                    )
+                );
+            }
 
             reservation.RestaurantId = request.RestaurantId;
 

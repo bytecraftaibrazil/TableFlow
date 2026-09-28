@@ -18,6 +18,7 @@ builder.Services.AddControllers();
 builder.Services.AddScoped<IRestaurantService, RestaurantService>();
 builder.Services.AddScoped<ITableService, TableService>();
 builder.Services.AddScoped<IReservationService, ReservationService>();
+builder.Services.AddScoped<IReservationEngine, ReservationEngine>();
 
 builder.Services.AddDbContext<TableFlowDbContext>(
     options =>
