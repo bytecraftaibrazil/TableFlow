@@ -7,8 +7,10 @@ namespace TableFlow.Api.Models
         Success,
         ReservationNotFound,
         RestaurantNotFound,
+        RestaurantInactive,
         TableNotFound,
         TableDoesNotBelongToRestaurant,
+        TableInactive,
         InvalidStatusTransition,
         CancelledReservationCannotBeUpdated
     }

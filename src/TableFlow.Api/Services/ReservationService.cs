@@ -34,12 +34,16 @@ namespace TableFlow.Api.Services
             );
         }
 
-        private static ReservationOperationStatus MapValidationStatus(ReservationValidationStatus status)
+        private static ReservationOperationStatus MapValidationStatus(
+            ReservationValidationStatus status)
         {
             return status switch
             {
                 ReservationValidationStatus.RestaurantNotFound =>
                     ReservationOperationStatus.RestaurantNotFound,
+
+                ReservationValidationStatus.RestaurantInactive =>
+                    ReservationOperationStatus.RestaurantInactive,
 
                 ReservationValidationStatus.TableNotFound =>
                     ReservationOperationStatus.TableNotFound,
@@ -47,8 +51,14 @@ namespace TableFlow.Api.Services
                 ReservationValidationStatus.TableDoesNotBelongToRestaurant =>
                     ReservationOperationStatus.TableDoesNotBelongToRestaurant,
 
-                _ =>
-                    ReservationOperationStatus.Success
+                ReservationValidationStatus.TableInactive =>
+                    ReservationOperationStatus.TableInactive,
+
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(status),
+                    status,
+                    "Unexpected reservation validation status."
+                )
             };
         }
 

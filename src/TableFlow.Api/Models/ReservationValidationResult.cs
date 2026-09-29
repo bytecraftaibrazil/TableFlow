@@ -4,8 +4,10 @@ namespace TableFlow.Api.Models
     {
         Success,
         RestaurantNotFound,
+        RestaurantInactive,
         TableNotFound,
-        TableDoesNotBelongToRestaurant
+        TableDoesNotBelongToRestaurant,
+        TableInactive
     }
 
     public record ReservationValidationResult(

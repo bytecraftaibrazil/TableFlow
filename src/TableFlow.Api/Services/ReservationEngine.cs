@@ -17,37 +17,60 @@ namespace TableFlow.Api.Services
         public async Task<ReservationValidationResult> ValidateAsync(
             ReservationCandidate candidate)
         {
-            var restaurantExists = await _dbContext.Restaurants
-                .AnyAsync(restaurant => restaurant.Id == candidate.RestaurantId);
+            var restaurantIsActive = await _dbContext.Restaurants
+                .AsNoTracking()
+                .Where(restaurant =>
+                    restaurant.Id == candidate.RestaurantId
+                )
+                .Select(restaurant =>
+                    (bool?)restaurant.IsActive
+                )
+                .FirstOrDefaultAsync();
 
-            if (!restaurantExists)
+            if (restaurantIsActive is null)
             {
                 return new ReservationValidationResult(
                     ReservationValidationStatus.RestaurantNotFound
                 );
             }
 
-            var tableRestaurantId = await _dbContext.Tables
+            if (!restaurantIsActive.Value)
+            {
+                return new ReservationValidationResult(
+                    ReservationValidationStatus.RestaurantInactive
+                );
+            }
+
+            var tableData = await _dbContext.Tables
                 .AsNoTracking()
                 .Where(table =>
                     table.Id == candidate.TableId
                 )
-                .Select(table =>
-                    (int?)table.RestaurantId
-                )
+                .Select(table => new
+                {
+                    table.RestaurantId,
+                    table.IsActive
+                })
                 .FirstOrDefaultAsync();
 
-            if (tableRestaurantId is null)
+            if (tableData is null)
             {
                 return new ReservationValidationResult(
                     ReservationValidationStatus.TableNotFound
                 );
             }
 
-            if (tableRestaurantId.Value != candidate.RestaurantId)
+            if (tableData.RestaurantId != candidate.RestaurantId)
             {
                 return new ReservationValidationResult(
                     ReservationValidationStatus.TableDoesNotBelongToRestaurant
+                );
+            }
+
+            if (!tableData.IsActive)
+            {
+                return new ReservationValidationResult(
+                    ReservationValidationStatus.TableInactive
                 );
             }
 

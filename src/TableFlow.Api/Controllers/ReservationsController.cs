@@ -302,6 +302,24 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
+            if (result.Status == ReservationOperationStatus.RestaurantInactive)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Restaurant inactive",
+                    detail: $"Restaurant with id {request.RestaurantId} is inactive."
+                );
+            }
+
+            if (result.Status == ReservationOperationStatus.TableInactive)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Table inactive",
+                    detail: $"Table with id {request.TableId} is inactive."
+                );
+            }
+
             var reservation = result.Reservation!;
 
             return CreatedAtAction(
@@ -404,6 +422,24 @@ namespace TableFlow.Api.Controllers
                     detail:
                         $"Table with id {request.TableId} does not belong "
                         + $"to restaurant {request.RestaurantId}."
+                );
+            }
+
+            if (result.Status == ReservationOperationStatus.RestaurantInactive)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Restaurant inactive",
+                    detail: $"Restaurant with id {request.RestaurantId} is inactive."
+                );
+            }
+
+            if (result.Status == ReservationOperationStatus.TableInactive)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Table inactive",
+                    detail: $"Table with id {request.TableId} is inactive."
                 );
             }
 
