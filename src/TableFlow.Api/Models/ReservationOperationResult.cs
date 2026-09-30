@@ -11,6 +11,7 @@ namespace TableFlow.Api.Models
         TableNotFound,
         TableDoesNotBelongToRestaurant,
         TableInactive,
+        PartySizeExceedsTableCapacity,
         InvalidStatusTransition,
         CancelledReservationCannotBeUpdated
     }

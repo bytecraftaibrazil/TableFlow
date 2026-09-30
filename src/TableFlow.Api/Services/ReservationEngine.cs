@@ -15,7 +15,7 @@ namespace TableFlow.Api.Services
         }
 
         public async Task<ReservationValidationResult> ValidateAsync(
-            ReservationCandidate candidate)
+    ReservationCandidate candidate)
         {
             var restaurantIsActive = await _dbContext.Restaurants
                 .AsNoTracking()
@@ -49,7 +49,8 @@ namespace TableFlow.Api.Services
                 .Select(table => new
                 {
                     table.RestaurantId,
-                    table.IsActive
+                    table.IsActive,
+                    table.Capacity
                 })
                 .FirstOrDefaultAsync();
 
@@ -71,6 +72,13 @@ namespace TableFlow.Api.Services
             {
                 return new ReservationValidationResult(
                     ReservationValidationStatus.TableInactive
+                );
+            }
+
+            if (candidate.PartySize > tableData.Capacity)
+            {
+                return new ReservationValidationResult(
+                    ReservationValidationStatus.PartySizeExceedsTableCapacity
                 );
             }
 

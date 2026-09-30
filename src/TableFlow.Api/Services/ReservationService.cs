@@ -53,6 +53,9 @@ namespace TableFlow.Api.Services
 
                 ReservationValidationStatus.TableInactive =>
                     ReservationOperationStatus.TableInactive,
+                
+                ReservationValidationStatus.PartySizeExceedsTableCapacity =>
+                    ReservationOperationStatus.PartySizeExceedsTableCapacity,
 
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(status),

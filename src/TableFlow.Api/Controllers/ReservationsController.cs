@@ -311,6 +311,16 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
+            if (result.Status == ReservationOperationStatus.PartySizeExceedsTableCapacity)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Table capacity exceeded",
+                    detail: $"Table with id {request.TableId} cannot accommodate "
+                        + $"a party of {request.PartySize} people."
+                );
+            }
+
             if (result.Status == ReservationOperationStatus.TableInactive)
             {
                 return Problem(
@@ -440,6 +450,16 @@ namespace TableFlow.Api.Controllers
                     statusCode: StatusCodes.Status409Conflict,
                     title: "Table inactive",
                     detail: $"Table with id {request.TableId} is inactive."
+                );
+            }
+
+            if (result.Status == ReservationOperationStatus.PartySizeExceedsTableCapacity)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Table capacity exceeded",
+                    detail: $"Table with id {request.TableId} cannot accommodate "
+                        + $"a party of {request.PartySize} people."
                 );
             }
 
