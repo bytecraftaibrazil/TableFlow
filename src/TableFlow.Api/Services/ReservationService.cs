@@ -29,6 +29,7 @@ namespace TableFlow.Api.Services
                 reservation.TableId,
                 reservation.CustomerName,
                 reservation.ReservationDate,
+                reservation.DurationMinutes,
                 reservation.PartySize,
                 reservation.Status
             );
@@ -53,9 +54,12 @@ namespace TableFlow.Api.Services
 
                 ReservationValidationStatus.TableInactive =>
                     ReservationOperationStatus.TableInactive,
-                
+
                 ReservationValidationStatus.PartySizeExceedsTableCapacity =>
                     ReservationOperationStatus.PartySizeExceedsTableCapacity,
+
+                ReservationValidationStatus.ReservationDurationInvalid =>
+                    ReservationOperationStatus.ReservationDurationInvalid,
 
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(status),
@@ -230,6 +234,7 @@ namespace TableFlow.Api.Services
                         reservation.TableId,
                         reservation.CustomerName,
                         reservation.ReservationDate,
+                        reservation.DurationMinutes,
                         reservation.PartySize,
                         reservation.Status
                     )
@@ -255,7 +260,8 @@ namespace TableFlow.Api.Services
                 request.RestaurantId,
                 request.TableId,
                 request.PartySize,
-                request.ReservationDate
+                request.ReservationDate,
+                request.DurationMinutes
             );
 
             var validationResult = await _reservationEngine.ValidateAsync(candidate);
@@ -275,6 +281,7 @@ namespace TableFlow.Api.Services
                 TableId = request.TableId,
                 CustomerName = request.CustomerName.Trim(),
                 ReservationDate = request.ReservationDate,
+                DurationMinutes = request.DurationMinutes,
                 PartySize = request.PartySize,
                 Status = "Pending"
             };
@@ -302,7 +309,8 @@ namespace TableFlow.Api.Services
                 request.RestaurantId,
                 request.TableId,
                 request.PartySize,
-                request.ReservationDate
+                request.ReservationDate,
+                request.DurationMinutes
             );
 
             var validationResult =
@@ -326,6 +334,8 @@ namespace TableFlow.Api.Services
             reservation.CustomerName = request.CustomerName.Trim();
 
             reservation.ReservationDate = request.ReservationDate;
+
+            reservation.DurationMinutes = request.DurationMinutes;
 
             reservation.PartySize = request.PartySize;
 

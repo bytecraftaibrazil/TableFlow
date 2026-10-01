@@ -6,6 +6,7 @@ namespace TableFlow.Api.DTOs
         int TableId,
         string CustomerName,
         DateTime ReservationDate,
+        int DurationMinutes,
         int PartySize
     );
 }

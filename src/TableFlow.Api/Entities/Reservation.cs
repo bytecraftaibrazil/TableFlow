@@ -12,6 +12,8 @@ namespace TableFlow.Api.Entities
 
         public DateTime ReservationDate { get; set; }
 
+        public int DurationMinutes { get; set; }
+
         public int PartySize { get; set; }
 
         public string Status { get; set; } = "Pending";

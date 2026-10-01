@@ -330,6 +330,15 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
+            if (result.Status == ReservationOperationStatus.ReservationDurationInvalid)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid reservation duration",
+                    detail: "Duration must be greater than zero."
+                );
+            }
+
             var reservation = result.Reservation!;
 
             return CreatedAtAction(
@@ -460,6 +469,15 @@ namespace TableFlow.Api.Controllers
                     title: "Table capacity exceeded",
                     detail: $"Table with id {request.TableId} cannot accommodate "
                         + $"a party of {request.PartySize} people."
+                );
+            }
+
+            if (result.Status == ReservationOperationStatus.ReservationDurationInvalid)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid reservation duration",
+                    detail: "Duration must be greater than zero."
                 );
             }
 

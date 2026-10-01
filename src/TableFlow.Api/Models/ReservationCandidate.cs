@@ -4,6 +4,7 @@ namespace TableFlow.Api.Models
         int RestaurantId,
         int TableId,
         int PartySize,
-        DateTime ReservationDateF
+        DateTime ReservationDate,
+        int DurationMinutes
     );
 }

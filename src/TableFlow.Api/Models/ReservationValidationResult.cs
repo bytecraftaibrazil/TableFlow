@@ -8,7 +8,8 @@ namespace TableFlow.Api.Models
         TableNotFound,
         TableDoesNotBelongToRestaurant,
         TableInactive,
-        PartySizeExceedsTableCapacity
+        PartySizeExceedsTableCapacity,
+        ReservationDurationInvalid
     }
 
     public record ReservationValidationResult(

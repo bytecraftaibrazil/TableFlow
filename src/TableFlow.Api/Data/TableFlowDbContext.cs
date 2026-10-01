@@ -93,6 +93,11 @@ public class TableFlowDbContext : DbContext
                         "CK_Reservations_Status_Valid",
                         "[Status] IN ('Pending', 'Confirmed', 'Cancelled')"
                     );
+
+                    table.HasCheckConstraint(
+                        "CK_Reservations_DurationMinutes_Positive",
+                        "[DurationMinutes] > 0"
+                    );
                 }
             );
 

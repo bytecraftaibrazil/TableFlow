@@ -13,7 +13,8 @@ namespace TableFlow.Api.Models
         TableInactive,
         PartySizeExceedsTableCapacity,
         InvalidStatusTransition,
-        CancelledReservationCannotBeUpdated
+        CancelledReservationCannotBeUpdated,
+        ReservationDurationInvalid
     }
 
     public record ReservationOperationResult(
