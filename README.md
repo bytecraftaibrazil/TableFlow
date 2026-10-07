@@ -4,7 +4,7 @@ TableFlow is a restaurant reservation management API built with ASP.NET Core.
 
 The API manages restaurants, tables, and reservations using SQL Server and Entity Framework Core.
 
-The project currently includes persistent storage, relational integrity, filtering, pagination, query optimization, and database-level constraints.
+It includes persistence, relational integrity, reservation business rules, table selection, availability queries, overlap detection, conflict prevention, filtering, pagination, and database-level constraints.
 
 ---
 
@@ -34,6 +34,7 @@ The project currently includes persistent storage, relational integrity, filteri
 - Validate restaurant relationships
 - Prevent duplicate table numbers inside the same restaurant
 - Enforce table number and capacity constraints
+- Select a suitable table using a Best Fit strategy
 
 ### Reservations
 
@@ -45,13 +46,219 @@ The project currently includes persistent storage, relational integrity, filteri
 - List upcoming reservations
 - List upcoming confirmed reservations
 - List upcoming pending reservations
+- Search reservations with filtering and pagination
 - Create reservations
 - Update reservations
 - Confirm reservations
 - Cancel reservations
+- Store reservation duration
+- Derive reservation end time from start time and duration
 - Validate restaurant and table relationships
+- Validate active restaurants and tables
+- Validate party size against table capacity
+- Query candidate and available tables
+- Detect overlapping reservation intervals
+- Prevent conflicting reservations
+- Allow adjacent non-overlapping reservations
+- Ignore cancelled reservations when checking availability
 - Prevent invalid reservation status transitions
 - Prevent updates to cancelled reservations
+
+---
+
+## Reservation Engine
+
+Reservation business rules are centralized in the reservation engine.
+
+The engine is responsible for:
+
+```text
+Restaurant validation
+↓
+Table validation
+↓
+Capacity validation
+↓
+Duration validation
+↓
+Suitable table selection
+↓
+Availability calculation
+↓
+Overlap detection
+↓
+Conflict detection
+```
+
+The service layer coordinates application operations and persistence, while controllers handle HTTP concerns.
+
+Current request flow:
+
+```text
+HTTP Request
+↓
+Controller
+↓
+Service Interface
+↓
+Service
+↓
+Reservation Engine
+↓
+Entity Framework Core
+↓
+SQL Server
+↓
+Application Result
+↓
+Controller
+↓
+HTTP Response
+```
+
+---
+
+## Table Selection
+
+TableFlow provides a suggested-table endpoint:
+
+```http
+GET /reservations/suggested-table
+```
+
+Example:
+
+```http
+GET /reservations/suggested-table?restaurantId=1&partySize=4
+```
+
+The selection strategy uses Best Fit:
+
+```text
+Active restaurant
+↓
+Active tables
+↓
+Capacity >= PartySize
+↓
+Order by Capacity
+↓
+Then by Table Number
+↓
+Then by Id
+↓
+First result
+```
+
+This minimizes unused table capacity while keeping the result deterministic.
+
+---
+
+## Reservation Availability
+
+TableFlow provides an availability endpoint:
+
+```http
+GET /reservations/availability
+```
+
+Example:
+
+```http
+GET /reservations/availability?restaurantId=1&partySize=4&reservationDate=2026-10-15T19:00:00&durationMinutes=90
+```
+
+The response separates:
+
+```text
+CandidateTables
+AvailableTables
+```
+
+### Candidate Tables
+
+Candidate tables satisfy structural reservation rules:
+
+- belong to the requested restaurant;
+- restaurant is active;
+- table is active;
+- table capacity is greater than or equal to the requested party size.
+
+### Available Tables
+
+Available tables are candidate tables that do not have a blocking reservation during the requested interval.
+
+Blocking statuses currently include:
+
+```text
+Pending
+Confirmed
+```
+
+Cancelled reservations do not block table availability.
+
+---
+
+## Reservation Time Model
+
+A reservation stores:
+
+```text
+ReservationDate
+DurationMinutes
+```
+
+The end time is derived:
+
+```text
+ReservationEnd = ReservationDate + DurationMinutes
+```
+
+`ReservationEnd` is not stored separately in the database.
+
+This avoids redundant temporal data.
+
+---
+
+## Overlap Detection
+
+TableFlow uses half-open reservation intervals:
+
+```text
+[start, end)
+```
+
+Two reservations overlap when:
+
+```text
+existingStart < requestedEnd
+&&
+requestedStart < existingEnd
+```
+
+Example conflict:
+
+```text
+Existing:  19:00 → 20:30
+Requested: 19:30 → 21:00
+```
+
+Example without conflict:
+
+```text
+Existing:  19:00 → 20:00
+Requested: 20:00 → 21:00
+```
+
+A reservation may start exactly when another reservation ends.
+
+Conflicting create and update operations return:
+
+```http
+409 Conflict
+```
+
+Updates exclude the reservation being modified from their own conflict check.
 
 ---
 
@@ -120,6 +327,7 @@ The API currently uses:
 - Controllers
 - Service interfaces
 - Service implementations
+- Reservation business-rule engine
 - Dependency Injection
 - Typed request and response DTOs
 - Application-level operation results
@@ -127,28 +335,6 @@ The API currently uses:
 - Consistent HTTP status codes
 - `ProblemDetails` error responses
 - Swagger / OpenAPI documentation
-
-Current request flow:
-
-```text
-HTTP Request
-↓
-Controller
-↓
-Service Interface
-↓
-Service
-↓
-Entity Framework Core
-↓
-SQL Server
-↓
-Application Result
-↓
-Controller
-↓
-HTTP Response
-```
 
 ---
 
@@ -241,6 +427,7 @@ Table numbers must also be unique inside the same restaurant:
 
 ```text
 PartySize > 0
+DurationMinutes > 0
 ```
 
 Valid reservation statuses are:
@@ -255,6 +442,7 @@ Constraint names:
 
 ```text
 CK_Reservations_PartySize_Positive
+CK_Reservations_DurationMinutes_Positive
 CK_Reservations_Status_Valid
 ```
 
@@ -262,7 +450,7 @@ CK_Reservations_Status_Valid
 
 ## Reservation Indexes
 
-TableFlow currently includes composite indexes designed around real reservation query patterns.
+TableFlow currently includes composite indexes designed around reservation query patterns.
 
 ### Status and reservation date
 
@@ -306,19 +494,15 @@ Indexes are maintained through Entity Framework Core migrations.
 | Successful deletion | `204 No Content` |
 | Invalid input | `400 Bad Request` |
 | Resource not found | `404 Not Found` |
-| Data or state conflict | `409 Conflict` |
+| Reservation or state conflict | `409 Conflict` |
 
-Collection endpoints return:
+Collection and availability endpoints return:
 
 ```http
 200 OK
 ```
 
-with an empty collection when no items match:
-
-```json
-[]
-```
+with empty collections when no items match.
 
 ---
 
@@ -367,6 +551,8 @@ GET /reservations/upcoming
 GET /reservations/upcoming/confirmed
 GET /reservations/upcoming/pending
 GET /reservations/search
+GET /reservations/suggested-table
+GET /reservations/availability
 
 POST /reservations
 
@@ -400,6 +586,7 @@ A cancelled reservation:
 ```text
 cannot be confirmed
 cannot be updated
+does not block table availability
 ```
 
 Repeated confirmation or cancellation operations are handled safely by the service behavior.
@@ -439,6 +626,8 @@ FirstOrDefaultAsync
 AnyAsync
 ```
 
+Suitable-table selection is shared between table suggestion and availability operations.
+
 ---
 
 ## Migrations
@@ -451,6 +640,9 @@ Current migration history includes changes for:
 - Data integrity constraints
 - Maximum table capacity
 - Reservation search indexes
+- Reservation duration
+
+The reservation-duration migration preserves existing records by backfilling a valid duration before making the column required.
 
 Typical workflow:
 
@@ -543,8 +735,6 @@ Install:
 - Git
 - Visual Studio Code
 
----
-
 ### Clone the repository
 
 ```bash
@@ -552,23 +742,17 @@ git clone https://github.com/bytecraftaibrazil/TableFlow.git
 cd TableFlow
 ```
 
----
-
 ### Restore dependencies
 
 ```bash
 dotnet restore
 ```
 
----
-
 ### Build the solution
 
 ```bash
 dotnet build
 ```
-
----
 
 ### Database Connection
 
@@ -584,8 +768,6 @@ The application expects the connection string:
 TableFlowDatabase
 ```
 
----
-
 ### Apply migrations
 
 From the repository root:
@@ -595,8 +777,6 @@ dotnet ef database update \
     --project src/TableFlow.Api \
     --startup-project src/TableFlow.Api
 ```
-
----
 
 ### Start the API
 
@@ -651,7 +831,7 @@ dotnet ef database update
 
 ## Current Architecture
 
-TableFlow currently follows a simple modular monolith structure inside a single ASP.NET Core application.
+TableFlow currently follows a modular monolith structure inside a single ASP.NET Core application.
 
 ```text
 TableFlow.Api
@@ -665,29 +845,29 @@ TableFlow.Api
 └── Program.cs
 ```
 
-The current structure keeps the application simple while the domain and business rules continue to evolve.
+The application currently separates HTTP handling, orchestration, reservation rules, persistence, and data access while remaining inside a single project.
 
 ---
 
 ## Next Technical Stages
 
-The next planned stages include:
+Planned technical evolution includes:
 
-1. Reservation business rules
-2. Reservation availability
-3. Table capacity validation
-4. Reservation overlap detection
-5. Conflict prevention
-6. Reservation status workflow improvements
-7. Unit and integration tests
-8. Clean Architecture
-9. CQRS and MediatR
-10. Authentication and authorization
-11. Structured logging and observability
-12. Health checks and rate limiting
-13. Docker and Docker Compose
-14. GitHub Actions
-15. Azure deployment
+1. Clean Architecture
+2. Dependency boundaries between Domain, Application, Infrastructure, and API
+3. CQRS and MediatR
+4. Reservation status workflow improvements
+5. Unit and integration testing
+6. Authentication and authorization
+7. Global exception handling
+8. Structured logging and correlation
+9. Health checks and rate limiting
+10. Docker and Docker Compose
+11. GitHub Actions
+12. Azure deployment
+13. Caching and Redis
+14. Idempotency and concurrency handling
+15. Background processing and resiliency
 16. System Design improvements
 
 ---
@@ -703,8 +883,11 @@ Modular Monolith
 Current persistence:
 SQL Server + Entity Framework Core
 
-Current stage:
-Data layer completed and ready for business rule expansion
+Current reservation capabilities:
+Table selection + availability + overlap detection + conflict prevention
+
+Current technical stage:
+Preparing for architectural restructuring
 ```
 
 ---
