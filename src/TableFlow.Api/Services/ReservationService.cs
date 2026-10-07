@@ -397,10 +397,11 @@ namespace TableFlow.Api.Services
             );
         }
 
-        public async Task<SuggestedTable?> SuggestTableAsync(int restaurantId,int partySize)
+        public async Task<SuggestedTable?> SuggestTableAsync(int restaurantId, int partySize)
         {
             return await _reservationEngine.SuggestTableAsync(restaurantId, partySize);
         }
+
         public Task<ReservationAvailabilityResult> GetAvailabilityAsync(
             ReservationAvailabilityRequest request)
         {
