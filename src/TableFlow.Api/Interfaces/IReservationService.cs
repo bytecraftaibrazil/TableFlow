@@ -30,5 +30,9 @@ namespace TableFlow.Api.Interfaces
         Task<ReservationOperationResult> CancelAsync(int id);
 
         Task<ReservationOperationResult> ConfirmAsync(int id);
+
+        Task<SuggestedTable?> SuggestTableAsync(int restaurantId,int partySize);
+        Task<ReservationAvailabilityResult> GetAvailabilityAsync(
+            ReservationAvailabilityRequest request);
     }
 }

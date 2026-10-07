@@ -61,6 +61,9 @@ namespace TableFlow.Api.Services
                 ReservationValidationStatus.ReservationDurationInvalid =>
                     ReservationOperationStatus.ReservationDurationInvalid,
 
+                ReservationValidationStatus.ReservationConflict =>
+                    ReservationOperationStatus.ReservationConflict,
+
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(status),
                     status,
@@ -314,9 +317,7 @@ namespace TableFlow.Api.Services
             );
 
             var validationResult =
-                await _reservationEngine.ValidateAsync(
-                    candidate
-                );
+                await _reservationEngine.ValidateAsync(candidate, id);
 
             if (!validationResult.IsSuccess)
             {
@@ -394,6 +395,16 @@ namespace TableFlow.Api.Services
                 ReservationOperationStatus.Success,
                 ToResponse(reservation)
             );
+        }
+
+        public async Task<SuggestedTable?> SuggestTableAsync(int restaurantId,int partySize)
+        {
+            return await _reservationEngine.SuggestTableAsync(restaurantId, partySize);
+        }
+        public Task<ReservationAvailabilityResult> GetAvailabilityAsync(
+            ReservationAvailabilityRequest request)
+        {
+            return _reservationEngine.GetAvailabilityAsync(request);
         }
     }
 }

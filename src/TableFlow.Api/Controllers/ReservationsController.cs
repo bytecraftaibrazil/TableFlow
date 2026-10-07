@@ -330,12 +330,18 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
+            if (result.Status == ReservationOperationStatus.ReservationConflict)
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Reservation conflict",
+                    detail: "The selected table is not available for the requested time period.");
+
             if (result.Status == ReservationOperationStatus.ReservationDurationInvalid)
             {
                 return Problem(
                     statusCode: StatusCodes.Status400BadRequest,
                     title: "Invalid reservation duration",
-                    detail: "Duration must be greater than zero."
+                    detail: "Duration must be greater than zero and produce a valid reservation end."
                 );
             }
 
@@ -472,12 +478,18 @@ namespace TableFlow.Api.Controllers
                 );
             }
 
+            if (result.Status == ReservationOperationStatus.ReservationConflict)
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Reservation conflict",
+                    detail: "The selected table is not available for the requested time period.");
+
             if (result.Status == ReservationOperationStatus.ReservationDurationInvalid)
             {
                 return Problem(
                     statusCode: StatusCodes.Status400BadRequest,
                     title: "Invalid reservation duration",
-                    detail: "Duration must be greater than zero."
+                    detail: "Duration must be greater than zero and produce a valid reservation end."
                 );
             }
 
@@ -601,6 +613,84 @@ namespace TableFlow.Api.Controllers
                 return "Party size must be greater than zero.";
 
             return null;
+        }
+
+        [HttpGet("suggested-table")]
+        [ProducesResponseType(
+            typeof(SuggestedTableResponse),
+            StatusCodes.Status200OK
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status400BadRequest
+        )]
+        [ProducesResponseType(
+            typeof(ProblemDetails),
+            StatusCodes.Status404NotFound
+        )]
+        public async Task<ActionResult> GetSuggestedTable(int restaurantId, int partySize)
+        {
+            if (restaurantId <= 0)
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid restaurant id",
+                    detail: "Restaurant id must be greater than zero."
+                );
+
+            if (partySize <= 0)
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid party size",
+                    detail: "Party size must be greater than zero."
+                );
+
+            var suggestion = await _reservationService.SuggestTableAsync(restaurantId, partySize);
+
+            if (suggestion is null)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "No suitable table"
+                );
+            }
+
+            var response = new SuggestedTableResponse
+            (
+                suggestion.Id,
+                suggestion.Number,
+                suggestion.Capacity
+            );
+
+            return Ok(response);
+        }
+
+        [HttpGet("availability")]
+        [ProducesResponseType(typeof(ReservationAvailabilityResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<ReservationAvailabilityResponse>> GetAvailability(
+            [FromQuery] int restaurantId,
+            [FromQuery] int partySize,
+            [FromQuery] DateTime reservationDate,
+            [FromQuery] int durationMinutes)
+        {
+            if (restaurantId <= 0 || partySize <= 0
+                || reservationDate <= DateTime.Now || durationMinutes <= 0
+                || durationMinutes > (DateTime.MaxValue - reservationDate).TotalMinutes)
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid availability request",
+                    detail: "Restaurant id, party size and duration must be greater than zero, reservation date must be in the future, and the resulting end must be a valid date.");
+
+            var result = await _reservationService.GetAvailabilityAsync(
+                new ReservationAvailabilityRequest(restaurantId, partySize, reservationDate, durationMinutes));
+
+            return Ok(new ReservationAvailabilityResponse(
+                result.RestaurantId, result.PartySize, result.ReservationDate,
+                result.DurationMinutes, result.ReservationEnd,
+                result.CandidateTables.Select(table =>
+                    new SuggestedTableResponse(table.Id, table.Number, table.Capacity)).ToList(),
+                result.AvailableTables.Select(table =>
+                    new SuggestedTableResponse(table.Id, table.Number, table.Capacity)).ToList()));
         }
     }
 }
