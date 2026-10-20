@@ -218,12 +218,12 @@ public class ReservationIntegrationTests(SqlServerFixture fixture) : IClassFixtu
         await using (var deleting = new TableFlowDbContext(new DbContextOptionsBuilder<TableFlowDbContext>()
             .UseSqlServer(fixture.ConnectionString).AddInterceptors(interceptor).Options))
         {
-            await Assert.ThrowsAsync<ResourceConflictException>(() => new TableService(deleting).DeleteAsync(ids.Table));
+            await Assert.ThrowsAsync<ResourceConflictException>(() => new TableService(deleting, new ReservationWriteSession(deleting)).DeleteAsync(ids.Table));
         }
         var empty = await SetupAsync();
         await using (var other = fixture.OpenDb())
         {
-            Assert.True(await new TableService(other).DeleteAsync(empty.Table));
+            Assert.True(await new TableService(other, new ReservationWriteSession(other)).DeleteAsync(empty.Table));
         }
         var restaurantInterceptor = new BeforeSave(async () =>
         {

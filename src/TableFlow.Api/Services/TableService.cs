@@ -10,10 +10,12 @@ namespace TableFlow.Api.Services
     public class TableService : ITableService
     {
         private readonly TableFlowDbContext _dbContext;
+        private readonly IReservationWriteSession _writeSession;
 
-        public TableService(TableFlowDbContext dbContext)
+        public TableService(TableFlowDbContext dbContext, IReservationWriteSession writeSession)
         {
             _dbContext = dbContext;
+            _writeSession = writeSession;
         }
 
         private static TableResponse ToResponse(
@@ -136,6 +138,11 @@ namespace TableFlow.Api.Services
 
         public async Task<TableOperationResult> UpdateAsync(int id, UpdateTableRequest request)
         {
+            // Shares the reservation-write lock so a booking cannot appear between
+            // checking linked reservations and transferring the table.
+            await using var transaction = await _writeSession.BeginAsync();
+            await _writeSession.LockTablesAsync(id);
+
             var table = await _dbContext.Tables.FindAsync(id);
 
             if (table is null)
@@ -150,6 +157,10 @@ namespace TableFlow.Api.Services
                 return new TableOperationResult(
                     TableOperationStatus.RestaurantNotFound
                 );
+
+            if (table.RestaurantId != request.RestaurantId
+                && await _dbContext.Reservations.AnyAsync(reservation => reservation.TableId == id))
+                return new TableOperationResult(TableOperationStatus.TableReassignmentConflict);
 
             var numberExists =
                 await _dbContext.Tables
@@ -173,6 +184,7 @@ namespace TableFlow.Api.Services
             table.IsActive = request.IsActive;
 
             await _dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             return new TableOperationResult(
                 TableOperationStatus.Success,

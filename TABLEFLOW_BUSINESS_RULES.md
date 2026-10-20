@@ -5,7 +5,7 @@
 **Technology:** C# / .NET 10 / ASP.NET Core / Entity Framework Core / SQL Server  
 **Purpose:** Document the business behavior and provide an accurate reference for writing service tests.
 
-> **Source of truth:** This document reflects the local implementation reviewed on October 20, 2026, including commits `fc10def` (reservation reliability) and `b7b3fcb` (mocked unit tests). It describes implemented behavior separately from remaining limitations. Review it whenever the code changes; GitHub publication status does not determine the local business contract.
+> **Source of truth:** This document reflects the local implementation reviewed on October 20, 2026, including commits `fc10def` (reservation reliability) and `b7b3fcb` (mocked unit tests). It also includes the subsequent table-reassignment correction. It describes implemented behavior separately from remaining limitations. Review it whenever the code changes; GitHub publication status does not determine the local business contract.
 >
 > **Scope guard:** Focus on existing business rules and tests. Do **not** introduce Docker, microservices, CQRS, MediatR, Clean Architecture, a frontend, or unrelated features.
 
@@ -71,10 +71,13 @@ The reservation's `RestaurantId` and `TableId` must describe the same restaurant
 | TAB-11 | Database relationships restrict deleting a table referenced by reservations. | EF Core / database |
 | TAB-12 | Any linked reservation, including `Cancelled`, prevents table deletion. The service throws `ResourceConflictException`, translated to HTTP `409` with `ProblemDetails`. | Service + exception handler |
 
+| TAB-13 | Changing a table's restaurant is forbidden when any reservation references it, including cancelled reservations. | `TableReassignmentConflict`, mapped to HTTP `409` with `ProblemDetails` |
+| TAB-14 | A table without linked reservations can move to an existing restaurant if its number is unique there. Other edits remain permitted when the restaurant is unchanged. | Service |
+
 **Current limitations and deletion handling:**
 
 - The service does not separately reject a table assigned to an **inactive** restaurant; reservation validation does reject bookings at inactive restaurants.
-- The update method allows `RestaurantId` to change if the destination restaurant exists and the table number is unique, even when reservations reference the table. This can leave existing reservation records inconsistent with their restaurant/table relationship. No reassignment restriction is currently implemented; do not invent one in a test.
+- Table updates begin a transaction and acquire the same per-table lock used by reservation writes before loading the table and checking reservations. This prevents an API reservation write from slipping between the dependency check and a transfer. Rejected transfers do not change table fields or commit the transaction. This rule does not automatically repair inconsistent records created before the correction.
 - Deletion checks reservations first and catches violations of known foreign-key constraints during persistence to handle the check/delete race. Missing tables return HTTP `404`; successful deletion returns `204`; dependency conflicts return `409`. Unrelated database errors propagate.
 
 ### Table test scenarios
@@ -280,14 +283,14 @@ These are persisted invariants and should be verified with SQL Server integratio
 - Reservation status is one of `Pending`, `Confirmed`, or `Cancelled`.
 - Reservation search indexes exist for `(Status, ReservationDate)` and `(RestaurantId, ReservationDate)`.
 
-**Data model caveat:** Separate foreign keys for `Reservation.RestaurantId` and `Reservation.TableId` do not, by themselves, guarantee both point to the same restaurant. That relationship is currently checked by application logic during reservation create/update.
+**Data model caveat:** Separate foreign keys for `Reservation.RestaurantId` and `Reservation.TableId` do not, by themselves, guarantee both point to the same restaurant. That relationship is checked by application logic during reservation create/update; table updates also prevent changing the restaurant of a table with linked reservations. Direct SQL bypassing these checks can still create inconsistent data.
 
 ## 9. Remaining Limitations and Demonstration Data
 
 The following limitations remain in the current implementation:
 
-1. **Table reassignment:** Changing a table's restaurant is allowed even with linked reservations and may invalidate their restaurant/table association. A restriction would be a new business-rule change requiring a separate decision.
-2. **Administrative edits:** Concurrent changes to table capacity/activity or restaurant activity do not use the reservation-write lock protocol. Reservation locks do not provide a guarantee against every administrative mutation.
+1. **Existing inconsistent data:** Table transfers with linked reservations are now blocked, but historical inconsistencies are not automatically repaired. Existing data needs a separate audit if the old transfer behavior was used.
+2. **Administrative edits:** Table updates now use the per-table reservation lock, but capacity/activity edits do not revalidate existing reservations. Restaurant activity edits do not use that lock. Reservation locks do not provide a guarantee against every administrative mutation.
 3. **External writers:** SQL scripts and applications bypassing the protocol can insert conflicting intervals. Availability remains advisory until the reservation write succeeds.
 4. **Legacy dates:** UTC interpretation requires the legacy-data audit described in section 6.3; the application does not infer or automatically repair old time zones.
 5. **Validation boundaries:** Controller-only checks must not be assumed to exist in direct service calls. Maximum text lengths and the table-capacity upper limit are enforced by the database, without an explicit controller validation for those limits. Unit mocks cannot prove database enforcement or guarantee a friendly HTTP response for those failures.
@@ -298,16 +301,17 @@ The following limitations remain in the current implementation:
 
 ### Existing unit tests with mocks
 
-The four classes in `tests/TableFlow.Tests/Unit/` use **xUnit**, **Moq**, and **MockQueryable.Moq**:
+The five test classes in `tests/TableFlow.Tests/Unit/` use **xUnit**, **Moq**, and **MockQueryable.Moq**:
 
 - `RestaurantServiceTests`: text trimming, update/not-found behavior, dependency checks, deletion, and propagation of unrelated persistence failures.
-- `TableServiceTests`: restaurant existence, duplicate numbers, self-exclusion during update, deletion dependencies across all statuses, and persistence failures.
+- `TableServiceTests`: restaurant existence, duplicate numbers, self-exclusion during update, transfer rejection across all reservation statuses, allowed edits/transfers, lock-before-check ordering, deletion dependencies, and persistence failures.
+- `TablesControllerTests`: a mocked transfer conflict produces HTTP `409` with `ProblemDetails`.
 - `ReservationServiceTests`: engine-result mapping, creation/update, state transitions, idempotency, reload-before-decision behavior, simulated locks/transactions, commit/disposal behavior, and delegation of suggestions/availability.
 - `ReservationEngineTests`: eligibility, capacity, UTC/future/party-size guards, duration, half-open overlap rules, blocking statuses, self-exclusion, suggestions, and availability.
 
 `MockDb` provides mocked `TableFlowDbContext`/`DbSet` dependencies. `IReservationEngine`, `IReservationWriteSession`, and transactions are mocked where appropriate. These tests do not connect to SQL Server or use an EF InMemory/SQLite database. Query expressions executed against mocked collections do not establish SQL translation, collation, constraints, or concurrency correctness.
 
-Run only these four classes:
+Run these five mocked test classes:
 
 ```powershell
 dotnet test --configuration Release --filter 'Category=Unit'
@@ -319,11 +323,11 @@ Run all unit tests, including the existing UTC parsing tests:
 dotnet test --configuration Release --filter 'Category!=Integration'
 ```
 
-The last unit validation passed **86 cases** in the four mocked classes, or **93 cases** including UTC parsing tests, with no failed or skipped cases. Release avoids overwriting the Debug executable when the local API is running. Counts are a dated validation result, not a promise that every suggested scenario below already has a dedicated test.
+The last unit validation passed **96 cases** in the five mocked classes, or **103 cases** including UTC parsing tests, with no failed or skipped cases. Release avoids overwriting the Debug executable when the local API is running. Counts are a dated validation result, not a promise that every suggested scenario below already has a dedicated test.
 
 ### Existing SQL Server integration suite
 
-The separate integration suite uses `TABLEFLOW_TEST_SQLSERVER`, creates a uniquely named disposable database, applies migrations, and cleans up only that test database. Without the variable, integration cases are explicitly skipped. It covers real HTTP reservation writes, concurrency, relationship deletions/check-delete races, UTC behavior, and migrations/seed reruns. It is not part of `Category=Unit` and was not rerun after the write-session refactor or during this documentation update; no fresh SQL Server validation is claimed here.
+The separate integration suite uses `TABLEFLOW_TEST_SQLSERVER`, creates a uniquely named disposable database, applies migrations, and cleans up only that test database. Without the variable, integration cases are explicitly skipped. It covers real HTTP reservation writes, concurrency, relationship deletions/check-delete races, UTC behavior, and migrations/seed reruns. It is not part of `Category=Unit` and was not rerun after the write-session refactor or after the table-reassignment correction; no fresh SQL Server validation is claimed here.
 
 SQL Server-specific guarantees require that suite, not unit mocks. See `README.md` for its connection prerequisites and execution commands.
 
@@ -358,7 +362,7 @@ Verify SQL Server CHECK constraints, unique indexes, foreign keys/restricted del
 
 - [x] Current local implementation compared with this document.
 - [x] Mocked unit tests exist for all four requested components, including successful and negative/boundary scenarios.
-- [x] Latest unit validation: 86 mocked cases passed; 93 passed including UTC parsing tests. Release build had no warnings/errors and formatting was verified.
+- [x] Latest unit validation: 96 mocked cases passed; 103 passed including UTC parsing tests. Release build had no warnings/errors and formatting was verified.
 - [x] SQL Server integration evidence is distinguished from unit evidence; no post-refactor integration rerun is claimed.
-- [x] Remaining reassignment, administrative-concurrency, external-writer, legacy-date, and validation-boundary limitations are documented.
-- [x] No Docker, unrelated features, or additional API changes are introduced by this documentation update.
+- [x] Remaining historical-data, administrative-edit, external-writer, legacy-date, and validation-boundary limitations are documented.
+- [x] No Docker or unrelated features were introduced. The documented API change blocks transfers of tables with linked reservations.

@@ -218,6 +218,12 @@ namespace TableFlow.Api.Controllers
 
             var result = await _tableService.UpdateAsync(id, request);
 
+            if (result.Status == TableOperationStatus.TableReassignmentConflict)
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Table reassignment conflict",
+                    detail: "A table with linked reservations cannot be transferred to another restaurant.");
+
             if (result.Status == TableOperationStatus.TableNotFound)
             {
                 return Problem(

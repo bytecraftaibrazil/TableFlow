@@ -1,74 +1,76 @@
 # TableFlow
 
-API de reservas de restaurantes em C# / .NET 10, ASP.NET Core, EF Core e SQL Server. Gerencia mesas por capacidade e horário e impede reservas sobrepostas sob concorrência.
+A restaurant reservation API built with C# / .NET 10, ASP.NET Core, EF Core, and SQL Server. It assigns tables by capacity and time and prevents overlapping reservations under concurrent requests.
 
-## Funcionalidades e arquitetura
+## Features and Architecture
 
-- CRUD de restaurantes e mesas; filtros por cidade, cozinha, restaurante e atividade.
-- Criação e atualização de reservas; confirmação e cancelamento idempotentes.
-- Busca por status, restaurante, mesa, grupo mínimo e datas, com paginação e ordenação estável por data e id.
-- Sugestão de mesa por capacidade e disponibilidade por intervalo.
-- Validação de relacionamentos e regras de reserva; erros HTTP com `ProblemDetails`.
-- Migrations, seed opcional idempotente, testes unitários e integração em SQL Server real.
+- Restaurant and table CRUD; filters by city, cuisine, restaurant, and active status.
+- Reservation creation and updates; idempotent confirmation and cancellation.
+- Search by status, restaurant, table, minimum party size, and date range, with pagination and stable ordering by date and ID.
+- Table suggestions by capacity and availability queries for a time interval.
+- Relationship and reservation validation; HTTP errors using `ProblemDetails`.
+- Migrations, an optional idempotent seed, unit tests, and integration tests against real SQL Server.
 
 ```mermaid
 flowchart LR
-    HTTP[Cliente / Swagger] --> Controllers
+    HTTP[Client / Swagger] --> Controllers
     Controllers --> Services
-    Services --> Engine[ReservationEngine: regras e disponibilidade]
+    Services --> Engine[ReservationEngine: rules and availability]
     Services --> EF[TableFlowDbContext / EF Core]
     Engine --> EF
     EF --> SQL[(SQL Server)]
 ```
 
-Monólito simples: controllers traduzem resultados dos serviços para HTTP; DTOs definem contratos; serviços coordenam persistência; `ReservationEngine` concentra as regras de alocação.
+A simple monolith: controllers translate service results into HTTP responses, DTOs define contracts, services coordinate persistence, and `ReservationEngine` centralizes table allocation rules.
 
-## Regras e concorrência
+## Business Rules and Concurrency
 
-Restaurante e mesa devem estar ativos; a mesa deve pertencer ao restaurante e acomodar o grupo positivo. A data deve estar no futuro e a duração em minutos deve ser positiva e produzir uma data final válida.
+The restaurant and table must be active. The table must belong to the requested restaurant and accommodate a positive party size. The reservation must start in the future, and its duration in minutes must be positive and produce a valid end time.
 
-`Pending` e `Confirmed` bloqueiam a mesa; `Cancelled` libera o intervalo. Os intervalos são semiabertos `[início, fim)`: uma reserva pode começar quando a anterior termina. Canceladas não podem ser editadas ou confirmadas. Repetir confirmação de uma confirmada ou cancelamento de uma cancelada retorna o estado atual.
+`Pending` and `Confirmed` block the table; `Cancelled` releases the interval. Intervals are half-open `[start, end)`: a reservation may start exactly when the previous one ends. Cancelled reservations cannot be updated or confirmed. Confirming an already confirmed reservation or cancelling an already cancelled reservation returns its current state.
 
-Criação e atualização usam transação SQL Server com `sp_getapplock` exclusivo por mesa antes de consultar conflitos e salvar. Trocar de mesa bloqueia a antiga e a nova por ordem crescente de id. Atualização, confirmação e cancelamento primeiro bloqueiam o id da reserva para evitar decisões com status obsoleto. O lock pertence à transação e é liberado no commit/rollback, inclusive entre instâncias da API. Timeout de lock (10 segundos) e deadlock retornam `409`, permitindo nova tentativa. [Documentação do SQL Server](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-getapplock-transact-sql).
+Creation and updates use a SQL Server transaction with an exclusive `sp_getapplock` per table before checking conflicts and saving. Moving a reservation locks both its old and new tables in ascending ID order. Updates, confirmation, and cancellation first lock the reservation ID and reload its persisted state to avoid decisions based on stale status. Locks belong to the transaction and release on commit/rollback, including across API instances. Lock timeouts (10 seconds) and deadlocks return `409`, allowing the caller to retry. See the [SQL Server documentation](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-getapplock-transact-sql).
 
-A garantia depende de gravações seguirem esse protocolo; SQL manual e outras aplicações que ignorem os locks não ficam protegidos. Execute o seed como operação administrativa sem tráfego concorrente. Não há constraint SQL de exclusão de intervalos.
+This guarantee depends on writes following the locking protocol. Manual SQL and other applications that bypass these locks are not protected. Run the seed as an administrative operation without concurrent application traffic. There is no SQL interval-exclusion constraint.
 
-Excluir restaurante com mesas/reservas ou mesa com reservas (inclusive canceladas) retorna `409`, sem cascata. A API verifica dependências e também traduz violações das FKs conhecidas se uma dependência surgir entre a verificação e a exclusão. Outros erros de banco não são mascarados. Recurso ausente retorna `404`; exclusão válida, `204`.
+Deleting a restaurant with tables/reservations or a table with reservations, including cancelled reservations, returns `409` without cascading deletes. The API checks dependencies and also translates violations of known foreign keys if a dependency appears between the check and deletion. Unrelated database errors are not masked. Missing resources return `404`; successful deletion returns `204`.
 
-## Datas e compatibilidade
+A table with any linked reservation, including a cancelled one, cannot move to another restaurant: `PUT /tables/{id}` returns `409` with `ProblemDetails`. Tables without reservations can move to an existing restaurant if their number is unique there. Number, capacity, and active status remain editable within the same restaurant. Table updates use a transaction and the same reservation lock to protect the dependency check against concurrent reservation creation. Previously inconsistent records are not automatically repaired.
 
-JSON e query string exigem ISO 8601 com segundos e `Z` ou offset explícito, como `2030-11-01T18:00:00Z` ou `2030-11-01T15:00:00-03:00`. Entradas sem fuso, datas inválidas e datas sem horário retornam `400`. Offsets são normalizados para UTC antes de validar e persistir. Respostas usam UTC com `Z`; comparações futuras usam `DateTime.UtcNow`.
+## Dates and Compatibility
 
-A coluna existente `datetime2` é mantida: armazena UTC sem metadado de fuso e o EF atribui `DateTimeKind.Utc` ao ler. Nenhuma migration altera horários existentes.
+JSON and query-string dates require ISO 8601 with seconds and an explicit `Z` or offset, such as `2030-11-01T18:00:00Z` or `2030-11-01T15:00:00-03:00`. Dates without a time zone, invalid dates, and date-only values return `400`. Offsets normalize to UTC before validation and persistence. Responses use UTC with `Z`; future-date comparisons use `DateTime.UtcNow`.
 
-**Antes de usar esta versão sobre banco legado:** faça backup e audite a origem/fuso de `ReservationDate`. Valores comprovadamente UTC permanecem intactos. Valores locais precisam de conversão única, separada e revisada, com o fuso de origem e tratamento das ambiguidades de horário de verão. Valores de origem desconhecida exigem revisão manual: `datetime2` sozinho não recupera o instante original. Não aponte esta versão para esse banco até concluir a auditoria: a leitura assume valores já em UTC. Os testes verificam preservação literal de uma linha legada auditada e rejeição de novas entradas ambíguas.
+The existing `datetime2` column is retained. It stores UTC values without time-zone metadata, and EF assigns `DateTimeKind.Utc` on reads. No migration shifts existing timestamps.
 
-## Executar localmente (sem Docker)
+**Before using this version with a legacy database:** back up the data and audit the original time zone of `ReservationDate`. Values confirmed as UTC remain unchanged. Local timestamps need a separate, reviewed, one-time conversion using the source time zone and an explicit policy for daylight-saving ambiguities. Unknown-origin timestamps require manual review: `datetime2` alone cannot recover the original instant. Do not point this version at that database until the audit is complete, because reads assume values already represent UTC. Tests verify literal preservation of an audited legacy UTC row and rejection of new ambiguous inputs.
 
-Pré-requisitos: SDK .NET 10 compatível com `global.json`, SQL Server local iniciado (Developer/Express ou LocalDB no Windows) e conta com permissão de criar/alterar o banco de demonstração. Não é necessário VS Code nem ferramenta global `dotnet-ef`.
+## Running Locally Without Docker
 
-Na raiz, em PowerShell:
+Prerequisites: a .NET 10 SDK compatible with `global.json`, a running local SQL Server instance (Developer/Express or LocalDB on Windows), and an account allowed to create/alter the demonstration database. VS Code and a global `dotnet-ef` installation are not required.
+
+From the repository root, in PowerShell:
 
 ```powershell
 dotnet restore
 dotnet build --no-restore
 $env:ConnectionStrings__TableFlowDatabase='Server=localhost;Database=TableFlowDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True'
 dotnet run --project src/TableFlow.Api -- --migrate
-dotnet run --project src/TableFlow.Api -- --seed  # opcional
+dotnet run --project src/TableFlow.Api -- --seed  # optional
 dotnet run --project src/TableFlow.Api --launch-profile http
 ```
 
-Para Express, substitua `localhost` por `.\SQLEXPRESS`; para LocalDB, por `(localdb)\MSSQLLocalDB`. Se usar autenticação SQL, forneça credenciais por variável de ambiente ou user-secrets sem versioná-las. `.env.example` é referência: o .NET não o carrega automaticamente. `TrustServerCertificate=True` é uma conveniência local para certificado próprio.
+For Express, replace `localhost` with `.\SQLEXPRESS`; for LocalDB, use `(localdb)\MSSQLLocalDB`. When using SQL authentication, provide credentials through environment variables or user-secrets without committing them. `.env.example` is a reference; .NET does not load it automatically. `TrustServerCertificate=True` is a local convenience for a self-signed certificate.
 
-API: `http://localhost:5172`; Swagger: `http://localhost:5172/docs`. Para HTTPS, execute `dotnet dev-certs https --trust` e use `--launch-profile https`, com Swagger em `https://localhost:7095/docs`. A UI é habilitada no ambiente Development.
+API: `http://localhost:5172`; Swagger: `http://localhost:5172/docs`. For HTTPS, run `dotnet dev-certs https --trust` and use `--launch-profile https`, with Swagger at `https://localhost:7095/docs`. The UI is enabled in the Development environment.
 
-`--migrate` aplica todas as migrations e encerra. `--seed` executa `scripts/seed-large.sql` e encerra. Pode combinar `-- --migrate --seed`. A inicialização normal nunca altera o esquema ou carrega dados. O script também pode ser executado por SSMS ou `sqlcmd` no banco configurado.
+`--migrate` applies all migrations and exits. `--seed` runs `scripts/seed-large.sql` and exits. They can be combined as `-- --migrate --seed`. Normal startup never applies migrations or loads data. The script can also run through SSMS or `sqlcmd` against the configured database.
 
-O seed adiciona 10 restaurantes, 80 mesas e 480 reservas com 90 minutos, datas UTC e status variados. Identifica seus registros por nomes de demonstração e número da mesa; reexecuções não duplicam registros nem reescrevem suas datas. As datas são relativas à primeira execução; reservas antigas não são renovadas. Há um restaurante inativo para demonstração. Reserve os prefixos `TF Demo -` e `Carga TF` para o seed.
+The seed adds 10 restaurants, 80 tables, and 480 reservations with 90-minute durations, UTC dates, and varied statuses. It identifies its records through demonstration names and table numbers. Reruns neither duplicate records nor rewrite their dates. Dates are relative to the initial insertion; old demonstration reservations are not refreshed. One restaurant is inactive for demonstration purposes. Reserve the `TF Demo -` and `Carga TF` prefixes for seed data.
 
-## Demonstração HTTP
+## HTTP Demonstration
 
-Exemplos para banco novo; use os ids retornados se já houver dados. Escolha uma data futura com fuso explícito.
+These examples assume a new database. Use the returned IDs if data already exists, and choose a future date with an explicit time zone. Sample names, cuisine, and city values are ordinary application data.
 
 ```http
 POST /restaurants
@@ -97,7 +99,7 @@ HTTP/1.1 200 OK
 {"restaurantId":1,"partySize":4,"reservationDate":"2030-11-01T18:00:00.0000000Z","durationMinutes":90,"reservationEnd":"2030-11-01T19:30:00.0000000Z","candidateTables":[{"id":1,"number":1,"capacity":4}],"availableTables":[{"id":1,"number":1,"capacity":4}]}
 ```
 
-Disponibilidade representa o estado observado durante a consulta, sem bloquear ou reservar mesas. Pode mudar antes do POST; apenas a criação concluída confirma a alocação. Para offsets positivos em URLs, codifique `+` como `%2B`.
+Availability reports the state observed during the query; it does not lock or allocate tables. It may change before the POST completes. Only a completed creation allocates the table. Encode `+` as `%2B` when using positive offsets in URLs.
 
 ```http
 POST /reservations
@@ -109,7 +111,7 @@ HTTP/1.1 201 Created
 {"id":1,"restaurantId":1,"tableId":1,"customerName":"Ana Silva","reservationDate":"2030-11-01T18:00:00.0000000Z","durationMinutes":90,"partySize":4,"status":"Pending"}
 ```
 
-Repetir o POST para a mesma mesa e intervalo retorna:
+Repeating the POST for the same table and interval returns:
 
 ```http
 HTTP/1.1 409 Conflict
@@ -118,37 +120,37 @@ Content-Type: application/problem+json
 {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.10","title":"Reservation conflict","status":409,"detail":"The selected table is not available for the requested time period."}
 ```
 
-`ProblemDetails` pode incluir `traceId`. `PUT /reservations/1/confirm` confirma; `PUT /reservations/1/cancel` cancela (sem corpo). Ambos retornam `200` com a reserva. Após cancelar, repita a disponibilidade: a mesa estará livre se não houver outra reserva bloqueadora. `PUT /reservations/1` aceita os mesmos campos do POST para editar reserva ativa.
+`ProblemDetails` may include `traceId`. `PUT /reservations/1/confirm` confirms a reservation; `PUT /reservations/1/cancel` cancels it, both without a request body. Both return `200` with the reservation. After cancellation, query availability again: the table will be free if no other reservation blocks it. `PUT /reservations/1` accepts the same fields as POST to update an active reservation.
 
-Busca: `GET /reservations/search?restaurantId=1&status=Pending&pageNumber=1&pageSize=20&descending=false`. Filtros adicionais: `tableId`, `minimumPartySize`, `fromDate` e `toDate` (limites inclusivos, datas com fuso). Resposta: `items`, `pageNumber`, `pageSize`, `totalCount`, `totalPages`, `hasNextPage`. `pageSize` aceita 1 a 100.
+Search: `GET /reservations/search?restaurantId=1&status=Pending&pageNumber=1&pageSize=20&descending=false`. Additional filters are `tableId`, `minimumPartySize`, `fromDate`, and `toDate` (inclusive boundaries, dates with time zones). The response contains `items`, `pageNumber`, `pageSize`, `totalCount`, `totalPages`, and `hasNextPage`. `pageSize` accepts 1 through 100.
 
-Permanecem as listas geral e por restaurante/mesa/status, `/reservations/upcoming`, `/reservations/upcoming/pending`, `/reservations/upcoming/confirmed` e `/reservations/suggested-table?restaurantId=1&partySize=4` (sugestão por capacidade sem horário).
+The general list and restaurant/table/status lists remain available, along with `/reservations/upcoming`, `/reservations/upcoming/pending`, `/reservations/upcoming/confirmed`, and `/reservations/suggested-table?restaurantId=1&partySize=4`. The last endpoint suggests a table by capacity without considering a reservation time.
 
-## Testes e CI
+## Tests and CI
 
-Somente testes unitários, sem banco (xUnit, Moq e MockQueryable.Moq):
+Run unit tests without a database (xUnit, Moq, and MockQueryable.Moq):
 
 ```powershell
 dotnet test --configuration Release --filter 'Category!=Integration'
 ```
 
-Os arquivos `tests/TableFlow.Tests/Unit/RestaurantServiceTests.cs`, `TableServiceTests.cs`, `ReservationServiceTests.cs` e `ReservationEngineTests.cs` usam mocks de `DbContext`/`DbSet`, motor de validação e coordenação transacional. Cobrem decisões, alterações de estado e chamadas de gravação; não comprovam tradução SQL, constraints ou concorrência real. O filtro `Category=Unit` seleciona apenas essas quatro classes. O filtro acima inclui também os testes de datas. A configuração Release permite executar os testes enquanto a API está aberta em Debug.
+The files in `tests/TableFlow.Tests/Unit/` include `RestaurantServiceTests.cs`, `TableServiceTests.cs`, `ReservationServiceTests.cs`, and `ReservationEngineTests.cs`. They mock `DbContext`/`DbSet`, validation, and transaction coordination. They verify decisions, state changes, and persistence calls; they do not establish SQL translation, constraints, or real concurrency guarantees. `TablesControllerTests` verifies the blocked-transfer `409` response using mocks. The `Category=Unit` filter selects these five classes. The filter above also includes UTC parsing tests. Release allows tests to run while the API is open in Debug.
 
-`IReservationWriteSession` concentra o início da transação, locks e releitura da reserva para que o `ReservationService` possa ter essas dependências simuladas. A implementação real mantém o protocolo SQL Server existente.
+`IReservationWriteSession` exposes transaction creation, locks, and reservation reloading so `ReservationService` can use mocked dependencies. `TableService` also uses it to coordinate table updates with reservation writes. The real implementation retains the SQL Server locking protocol.
 
-Suíte completa com SQL Server real:
+Run the full suite with real SQL Server:
 
 ```powershell
 $env:TABLEFLOW_TEST_SQLSERVER='Server=localhost;Database=master;Integrated Security=True;Encrypt=True;TrustServerCertificate=True'
 dotnet test
 ```
 
-A conta precisa criar e excluir bancos. A suíte cria um banco exclusivo `TableFlowTests_<guid>`, aplica migrations e exclui apenas esse banco ao terminar. Não usa InMemory/SQLite nem apaga o banco da aplicação. Sem a variável, a integração aparece explicitamente como ignorada; isso não comprova validação SQL. Com a variável definida, conexão ou migrations inválidas falham os testes.
+The test account must be allowed to create and drop databases. The suite creates a uniquely named `TableFlowTests_<guid>` database, applies migrations, and drops only that database when finished. It does not use InMemory/SQLite or delete the application database. Without the environment variable, integration tests are explicitly skipped; that is not evidence of SQL validation. With the variable set, invalid connections or migrations fail the tests.
 
-Integração cobre capacidade, atividade, relacionamentos, duração, datas, intervalos consecutivos/sobrepostos, criação/atualização da própria reserva, mudança de mesa concorrente, status concorrentes, disponibilidade, busca/paginação, exclusões e corrida de FK, data legada auditada, migrations e reexecução do seed. Requisições HTTP concorrentes usam escopos/conexões separados e verificam respostas e estado persistido.
+Integration coverage includes capacity, active status, relationships, duration, dates, adjacent/overlapping intervals, creation and self-updates, concurrent reservation moves, concurrent status changes, availability, search/pagination, deletion and foreign-key races, audited legacy UTC data, migrations, and seed reruns. Concurrent HTTP requests use separate scopes/connections and verify responses and persisted state.
 
-O workflow `.github/workflows/ci.yml` executa restore, build Release e todos os testes em push e pull request, com SQL Server LocalDB no runner Windows e resultados TRX como artefato. Falhas nos testes falham o job. O LocalDB consta na [imagem oficial do runner](https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md). Nenhum container é necessário.
+The `.github/workflows/ci.yml` workflow runs restore, a Release build, and all tests on push and pull request, using SQL Server LocalDB on a Windows runner and uploading TRX results. Failed tests fail the job. LocalDB is included in the [official runner image](https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md). No container is required.
 
-## Limitações
+## Limitations
 
-Projeto de portfólio sem autenticação, integrações externas, observabilidade de produção ou infraestrutura de nuvem. A disponibilidade é consultiva. Mudanças administrativas simultâneas em capacidade/atividade das mesas não usam o protocolo de reserva. Cancelamento mantém o histórico; exclusões preservam as FKs Restrict. Migrations anteriores são preservadas e a política UTC não altera o esquema. Não há push, deploy ou criação de tag no fluxo local.
+This portfolio project has no authentication, external integrations, production observability, or cloud infrastructure. Availability is advisory. Table updates use the reservation lock but do not revalidate existing reservations after capacity/active-status changes. Restaurant active-status updates do not use this protocol. Previously inconsistent restaurant/table associations are not automatically repaired. Cancellation preserves history; deletion retains restricted foreign keys. Existing migrations are preserved, and the UTC policy does not change the schema. The local workflow does not push, deploy, or create release tags.
