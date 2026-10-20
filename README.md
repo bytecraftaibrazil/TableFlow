@@ -37,6 +37,8 @@ Deleting a restaurant with tables/reservations or a table with reservations, inc
 
 A table with any linked reservation, including a cancelled one, cannot move to another restaurant: `PUT /tables/{id}` returns `409` with `ProblemDetails`. Tables without reservations can move to an existing restaurant if their number is unique there. Number, capacity, and active status remain editable within the same restaurant. Table updates use a transaction and the same reservation lock to protect the dependency check against concurrent reservation creation. Previously inconsistent records are not automatically repaired.
 
+A capacity reduction must still accommodate every `Pending` or `Confirmed` reservation on that table whose end time is later than the current UTC time. This includes reservations already in progress, not just future starts. Cancelled reservations and reservations ending at or before the check time are ignored. If any relevant party size exceeds the requested capacity, the update returns `409` with `ProblemDetails` (`Table capacity conflict`) before changing or saving any table field. Capacity increases, unchanged capacity, and reductions that still fit all relevant parties remain allowed. The check runs inside the existing transaction and table lock, shared with reservation writes.
+
 ## Dates and Compatibility
 
 JSON and query-string dates require ISO 8601 with seconds and an explicit `Z` or offset, such as `2030-11-01T18:00:00Z` or `2030-11-01T15:00:00-03:00`. Dates without a time zone, invalid dates, and date-only values return `400`. Offsets normalize to UTC before validation and persistence. Responses use UTC with `Z`; future-date comparisons use `DateTime.UtcNow`.
@@ -134,7 +136,7 @@ Run unit tests without a database (xUnit, Moq, and MockQueryable.Moq):
 dotnet test --configuration Release --filter 'Category!=Integration'
 ```
 
-The files in `tests/TableFlow.Tests/Unit/` include `RestaurantServiceTests.cs`, `TableServiceTests.cs`, `ReservationServiceTests.cs`, and `ReservationEngineTests.cs`. They mock `DbContext`/`DbSet`, validation, and transaction coordination. They verify decisions, state changes, and persistence calls; they do not establish SQL translation, constraints, or real concurrency guarantees. `TablesControllerTests` verifies the blocked-transfer `409` response using mocks. The `Category=Unit` filter selects these five classes. The filter above also includes UTC parsing tests. Release allows tests to run while the API is open in Debug.
+The files in `tests/TableFlow.Tests/Unit/` include `RestaurantServiceTests.cs`, `TableServiceTests.cs`, `ReservationServiceTests.cs`, and `ReservationEngineTests.cs`. They mock `DbContext`/`DbSet`, validation, and transaction coordination. They verify decisions, state changes, and persistence calls; they do not establish SQL translation, constraints, or real concurrency guarantees. `TablesControllerTests` verifies the blocked-transfer and insufficient-capacity `409` responses using mocks. The `Category=Unit` filter selects these five classes. The filter above also includes UTC parsing tests. Release allows tests to run while the API is open in Debug.
 
 `IReservationWriteSession` exposes transaction creation, locks, and reservation reloading so `ReservationService` can use mocked dependencies. `TableService` also uses it to coordinate table updates with reservation writes. The real implementation retains the SQL Server locking protocol.
 
@@ -142,15 +144,17 @@ Run the full suite with real SQL Server:
 
 ```powershell
 $env:TABLEFLOW_TEST_SQLSERVER='Server=localhost;Database=master;Integrated Security=True;Encrypt=True;TrustServerCertificate=True'
-dotnet test
+dotnet test --configuration Release
 ```
 
 The test account must be allowed to create and drop databases. The suite creates a uniquely named `TableFlowTests_<guid>` database, applies migrations, and drops only that database when finished. It does not use InMemory/SQLite or delete the application database. Without the environment variable, integration tests are explicitly skipped; that is not evidence of SQL validation. With the variable set, invalid connections or migrations fail the tests.
 
 Integration coverage includes capacity, active status, relationships, duration, dates, adjacent/overlapping intervals, creation and self-updates, concurrent reservation moves, concurrent status changes, availability, search/pagination, deletion and foreign-key races, audited legacy UTC data, migrations, and seed reruns. Concurrent HTTP requests use separate scopes/connections and verify responses and persisted state.
 
+`TableCapacityIntegrationTests` verifies reductions against future and ongoing active reservations, ignored cancelled/ended reservations, exact-fit reductions, increases, unchanged capacity, reservations on other tables, rejection without persisted table changes, and concurrent reservation creation versus capacity reduction. The latest local Release run passed all **136 tests**: **120 unit cases** (including UTC parsing) and **16 SQL Server integration cases**, with no failures or skips.
+
 The `.github/workflows/ci.yml` workflow runs restore, a Release build, and all tests on push and pull request, using SQL Server LocalDB on a Windows runner and uploading TRX results. Failed tests fail the job. LocalDB is included in the [official runner image](https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md). No container is required.
 
 ## Limitations
 
-This portfolio project has no authentication, external integrations, production observability, or cloud infrastructure. Availability is advisory. Table updates use the reservation lock but do not revalidate existing reservations after capacity/active-status changes. Restaurant active-status updates do not use this protocol. Previously inconsistent restaurant/table associations are not automatically repaired. Cancellation preserves history; deletion retains restricted foreign keys. Existing migrations are preserved, and the UTC policy does not change the schema. The local workflow does not push, deploy, or create release tags.
+This portfolio project has no authentication, external integrations, production observability, or cloud infrastructure. Availability is advisory. Table capacity reductions protect unended active reservations, but changing table activity does not cancel existing reservations. Restaurant active-status updates do not use the reservation lock protocol. Previously inconsistent restaurant/table associations are not automatically repaired. Cancellation preserves history; deletion retains restricted foreign keys. Existing migrations are preserved, and the UTC policy does not change the schema. The local workflow does not push, deploy, or create release tags.

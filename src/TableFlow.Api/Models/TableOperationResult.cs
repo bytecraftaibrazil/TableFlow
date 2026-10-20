@@ -8,7 +8,8 @@ namespace TableFlow.Api.Models
         TableNotFound,
         RestaurantNotFound,
         DuplicateNumber,
-        TableReassignmentConflict
+        TableReassignmentConflict,
+        TableCapacityConflict
     }
 
     public record TableOperationResult(

@@ -237,6 +237,114 @@ public class TableServiceTests
         db.VerifySavedOnce();
     }
 
+    [Theory]
+    [InlineData("Pending", 60, 90, 6, 4, false)]
+    [InlineData("Confirmed", 60, 90, 6, 4, false)]
+    [InlineData("Pending", -30, 90, 6, 4, false)]
+    [InlineData("Confirmed", -30, 90, 6, 4, false)]
+    [InlineData("Cancelled", 60, 90, 6, 4, true)]
+    [InlineData("Cancelled", -30, 90, 6, 4, true)]
+    [InlineData("Pending", -180, 90, 6, 4, true)]
+    [InlineData("Confirmed", -180, 90, 6, 4, true)]
+    [InlineData("Pending", -90, 90, 6, 4, true)]
+    [InlineData("Pending", 60, 90, 4, 4, true)]
+    [InlineData("Confirmed", -30, 90, 4, 4, true)]
+    [InlineData("Pending", 60, 90, 6, 10, true)]
+    [InlineData("Confirmed", -30, 90, 6, 10, true)]
+    [InlineData("Confirmed", 60, 90, 6, 8, true)]
+    public async Task CapacityUpdateChecksOnlyUnendedActiveReservations(
+        string status, int startOffset, int duration, int partySize, int capacity, bool allowed)
+    {
+        using var db = new MockDb();
+        db.Restaurants.Add(new Restaurant { Id = 1 });
+        var table = new RestaurantTable { Id = 10, RestaurantId = 1, Number = 1, Capacity = 8, IsActive = true };
+        db.Tables.Add(table);
+        db.Reservations.Add(new Reservation
+        {
+            TableId = 10,
+            RestaurantId = 1,
+            Status = status,
+            PartySize = partySize,
+            ReservationDate = DateTime.UtcNow.AddMinutes(startOffset),
+            DurationMinutes = duration
+        });
+        var transaction = new Mock<IDbContextTransaction>(MockBehavior.Strict);
+        transaction.Setup(t => t.CommitAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        transaction.Setup(t => t.DisposeAsync()).Returns(ValueTask.CompletedTask);
+        var session = new Mock<IReservationWriteSession>(MockBehavior.Strict);
+        session.Setup(s => s.BeginAsync()).ReturnsAsync(transaction.Object);
+        session.Setup(s => s.LockTablesAsync(It.Is<int[]>(ids => ids.SequenceEqual(new[] { 10 }))))
+            .Returns(Task.CompletedTask);
+
+        var result = await Service(db, session).UpdateAsync(10, new(1, 2, capacity, false));
+
+        Assert.Equal(allowed ? TableOperationStatus.Success : TableOperationStatus.TableCapacityConflict, result.Status);
+        Assert.Equal(allowed ? capacity : 8, table.Capacity);
+        Assert.Equal(allowed ? 2 : 1, table.Number);
+        Assert.Equal(!allowed, table.IsActive);
+        Assert.Equal(1, table.RestaurantId);
+        if (allowed) Assert.Equal(capacity, result.Table!.Capacity);
+        else Assert.Null(result.Table);
+        db.Context.Verify(context => context.SaveChangesAsync(It.IsAny<CancellationToken>()), allowed ? Times.Once : Times.Never);
+        transaction.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), allowed ? Times.Once : Times.Never);
+        transaction.Verify(t => t.DisposeAsync(), Times.Once);
+        session.Verify(s => s.LockTablesAsync(It.Is<int[]>(ids => ids.SequenceEqual(new[] { 10 }))), Times.Once);
+    }
+
+    [Fact]
+    public async Task CapacityReductionWithoutReservationsOrWithOnlyOtherTableReservationsSucceeds()
+    {
+        using var db = new MockDb();
+        db.Restaurants.Add(new Restaurant { Id = 1 });
+        db.Tables.Add(new RestaurantTable { Id = 10, RestaurantId = 1, Number = 1, Capacity = 8 });
+        var service = Service(db);
+        Assert.Equal(TableOperationStatus.Success, (await service.UpdateAsync(10, new(1, 1, 6, true))).Status);
+        db.Reservations.Add(new Reservation
+        {
+            TableId = 99,
+            Status = "Confirmed",
+            PartySize = 8,
+            ReservationDate = DateTime.UtcNow.AddDays(1),
+            DurationMinutes = 90
+        });
+        Assert.Equal(TableOperationStatus.Success, (await service.UpdateAsync(10, new(1, 1, 4, true))).Status);
+        Assert.Equal(4, db.Tables[0].Capacity);
+    }
+
+    [Fact]
+    public async Task CapacityReductionChecksEveryRelevantReservationAfterTheTableLock()
+    {
+        using var db = new MockDb();
+        db.Restaurants.Add(new Restaurant { Id = 1 });
+        db.Tables.Add(new RestaurantTable { Id = 10, RestaurantId = 1, Number = 1, Capacity = 8 });
+        db.Reservations.Add(new Reservation
+        {
+            TableId = 10,
+            Status = "Pending",
+            PartySize = 2,
+            ReservationDate = DateTime.UtcNow.AddDays(1),
+            DurationMinutes = 90
+        });
+        var transaction = new Mock<IDbContextTransaction>(MockBehavior.Strict);
+        transaction.Setup(t => t.DisposeAsync()).Returns(ValueTask.CompletedTask);
+        var session = new Mock<IReservationWriteSession>(MockBehavior.Strict);
+        session.Setup(s => s.BeginAsync()).ReturnsAsync(transaction.Object);
+        session.Setup(s => s.LockTablesAsync(It.IsAny<int[]>())).Callback(() => db.Reservations.Add(new Reservation
+        {
+            TableId = 10,
+            Status = "Confirmed",
+            PartySize = 6,
+            ReservationDate = DateTime.UtcNow.AddDays(2),
+            DurationMinutes = 90
+        })).Returns(Task.CompletedTask);
+
+        Assert.Equal(TableOperationStatus.TableCapacityConflict,
+            (await Service(db, session).UpdateAsync(10, new(1, 1, 4, true))).Status);
+        Assert.Equal(8, db.Tables[0].Capacity);
+        db.VerifyNotSaved();
+        transaction.Verify(t => t.DisposeAsync(), Times.Once);
+    }
+
     [Fact]
     public async Task DeletePropagatesUnrelatedDatabaseFailure()
     {

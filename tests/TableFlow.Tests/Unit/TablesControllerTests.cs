@@ -12,13 +12,15 @@ namespace TableFlow.Tests.Unit;
 [Trait("Category", "Unit")]
 public class TablesControllerTests
 {
-    [Fact]
-    public async Task TransferConflictReturns409ProblemDetails()
+    [Theory]
+    [InlineData(TableOperationStatus.TableReassignmentConflict, "Table reassignment conflict", "linked reservations")]
+    [InlineData(TableOperationStatus.TableCapacityConflict, "Table capacity conflict", "active reservation that has not ended")]
+    public async Task UpdateConflictReturns409ProblemDetails(TableOperationStatus status, string title, string detail)
     {
         var request = new UpdateTableRequest(2, 1, 4, true);
         var service = new Mock<ITableService>(MockBehavior.Strict);
         service.Setup(s => s.UpdateAsync(10, request))
-            .ReturnsAsync(new TableOperationResult(TableOperationStatus.TableReassignmentConflict));
+            .ReturnsAsync(new TableOperationResult(status));
         var problemFactory = new Mock<ProblemDetailsFactory>(MockBehavior.Strict);
         problemFactory.Setup(factory => factory.CreateProblemDetails(
                 It.IsAny<HttpContext>(), It.IsAny<int?>(), It.IsAny<string>(),
@@ -40,8 +42,8 @@ public class TablesControllerTests
         Assert.Equal(StatusCodes.Status409Conflict, response.StatusCode);
         var problem = Assert.IsType<ProblemDetails>(response.Value);
         Assert.Equal(StatusCodes.Status409Conflict, problem.Status);
-        Assert.Equal("Table reassignment conflict", problem.Title);
-        Assert.Contains("linked reservations", problem.Detail);
+        Assert.Equal(title, problem.Title);
+        Assert.Contains(detail, problem.Detail);
         service.Verify(s => s.UpdateAsync(10, request), Times.Once);
     }
 }

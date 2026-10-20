@@ -139,7 +139,7 @@ namespace TableFlow.Api.Services
         public async Task<TableOperationResult> UpdateAsync(int id, UpdateTableRequest request)
         {
             // Shares the reservation-write lock so a booking cannot appear between
-            // checking linked reservations and transferring the table.
+            // checking reservations and transferring or reducing the table's capacity.
             await using var transaction = await _writeSession.BeginAsync();
             await _writeSession.LockTablesAsync(id);
 
@@ -176,6 +176,19 @@ namespace TableFlow.Api.Services
                     TableOperationStatus
                         .DuplicateNumber
                 );
+            }
+
+            if (request.Capacity < table.Capacity)
+            {
+                var utcNow = DateTime.UtcNow;
+                var capacityConflict = await _dbContext.Reservations.AnyAsync(reservation =>
+                    reservation.TableId == id
+                    && (reservation.Status == "Pending" || reservation.Status == "Confirmed")
+                    && reservation.PartySize > request.Capacity
+                    && reservation.ReservationDate.AddMinutes(reservation.DurationMinutes) > utcNow);
+
+                if (capacityConflict)
+                    return new TableOperationResult(TableOperationStatus.TableCapacityConflict);
             }
 
             table.RestaurantId = request.RestaurantId;

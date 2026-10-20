@@ -218,6 +218,12 @@ namespace TableFlow.Api.Controllers
 
             var result = await _tableService.UpdateAsync(id, request);
 
+            if (result.Status == TableOperationStatus.TableCapacityConflict)
+                return Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Table capacity conflict",
+                    detail: "The requested capacity cannot accommodate an active reservation that has not ended.");
+
             if (result.Status == TableOperationStatus.TableReassignmentConflict)
                 return Problem(
                     statusCode: StatusCodes.Status409Conflict,
