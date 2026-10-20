@@ -64,7 +64,7 @@ API: `http://localhost:5172`; Swagger: `http://localhost:5172/docs`. Para HTTPS,
 
 `--migrate` aplica todas as migrations e encerra. `--seed` executa `scripts/seed-large.sql` e encerra. Pode combinar `-- --migrate --seed`. A inicialização normal nunca altera o esquema ou carrega dados. O script também pode ser executado por SSMS ou `sqlcmd` no banco configurado.
 
-O seed adiciona 10 restaurantes, 80 mesas e 480 reservas com 90 minutos, datas UTC e status variados. Identifica seus registros por nomes de demonstração e número da mesa; reexecuções não duplicam registros nem reescrevem suas datas. As datas são relativas à primeira execução; reservas antigas não são renovadas. Há um restaurante inativo para demonstração. Reserve os prefixos `TF Demo -` e `Carga TF ` para o seed.
+O seed adiciona 10 restaurantes, 80 mesas e 480 reservas com 90 minutos, datas UTC e status variados. Identifica seus registros por nomes de demonstração e número da mesa; reexecuções não duplicam registros nem reescrevem suas datas. As datas são relativas à primeira execução; reservas antigas não são renovadas. Há um restaurante inativo para demonstração. Reserve os prefixos `TF Demo -` e `Carga TF` para o seed.
 
 ## Demonstração HTTP
 
