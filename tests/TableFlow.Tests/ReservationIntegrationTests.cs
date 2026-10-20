@@ -16,7 +16,7 @@ namespace TableFlow.Tests;
 public class ReservationIntegrationTests(SqlServerFixture fixture) : IClassFixture<SqlServerFixture>
 {
     private HttpClient Client() => fixture.Factory.CreateClient(new() { BaseAddress = new Uri("https://localhost") });
-    private static ReservationService Service(TableFlowDbContext db) => new(db, new ReservationEngine(db));
+    private static ReservationService Service(TableFlowDbContext db) => new(db, new ReservationEngine(db), new ReservationWriteSession(db));
 
     private async Task<(int Restaurant, int Table)> SetupAsync(bool restaurantActive = true, bool tableActive = true)
     {

@@ -11,13 +11,16 @@ namespace TableFlow.Api.Services
     {
         private readonly TableFlowDbContext _dbContext;
         private readonly IReservationEngine _reservationEngine;
+        private readonly IReservationWriteSession _writeSession;
 
         public ReservationService(
             TableFlowDbContext dbContext,
-            IReservationEngine reservationEngine)
+            IReservationEngine reservationEngine,
+            IReservationWriteSession writeSession)
         {
             _dbContext = dbContext;
             _reservationEngine = reservationEngine;
+            _writeSession = writeSession;
         }
 
         private static ReservationResponse ToResponse(
@@ -261,8 +264,8 @@ namespace TableFlow.Api.Services
 
         public async Task<ReservationOperationResult> CreateAsync(CreateReservationRequest request)
         {
-            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
-            await ReservationLock.TablesAsync(_dbContext, request.TableId);
+            await using var transaction = await _writeSession.BeginAsync();
+            await _writeSession.LockTablesAsync(request.TableId);
 
             var candidate = new ReservationCandidate(
                 request.RestaurantId,
@@ -306,16 +309,16 @@ namespace TableFlow.Api.Services
 
         public async Task<ReservationOperationResult> UpdateAsync(int id, UpdateReservationRequest request)
         {
-            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
-            await ReservationLock.AcquireAsync(_dbContext, $"reservation:{id}");
+            await using var transaction = await _writeSession.BeginAsync();
+            await _writeSession.LockReservationAsync(id);
 
             var reservation = await _dbContext.Reservations.FindAsync(id);
 
             if (reservation is null)
                 return new ReservationOperationResult(ReservationOperationStatus.ReservationNotFound);
 
-            await _dbContext.Entry(reservation).ReloadAsync();
-            await ReservationLock.TablesAsync(_dbContext, reservation.TableId, request.TableId);
+            await _writeSession.ReloadAsync(reservation);
+            await _writeSession.LockTablesAsync(reservation.TableId, request.TableId);
 
             if (reservation.Status == "Cancelled")
                 return new ReservationOperationResult(
@@ -364,16 +367,16 @@ namespace TableFlow.Api.Services
 
         public async Task<ReservationOperationResult> CancelAsync(int id)
         {
-            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
-            await ReservationLock.AcquireAsync(_dbContext, $"reservation:{id}");
+            await using var transaction = await _writeSession.BeginAsync();
+            await _writeSession.LockReservationAsync(id);
 
             var reservation = await _dbContext.Reservations.FindAsync(id);
 
             if (reservation is null)
                 return new ReservationOperationResult(ReservationOperationStatus.ReservationNotFound);
 
-            await _dbContext.Entry(reservation).ReloadAsync();
-            await ReservationLock.TablesAsync(_dbContext, reservation.TableId);
+            await _writeSession.ReloadAsync(reservation);
+            await _writeSession.LockTablesAsync(reservation.TableId);
 
             if (reservation.Status == "Cancelled")
                 return new ReservationOperationResult(ReservationOperationStatus.Success, ToResponse(reservation));
@@ -391,16 +394,16 @@ namespace TableFlow.Api.Services
 
         public async Task<ReservationOperationResult> ConfirmAsync(int id)
         {
-            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
-            await ReservationLock.AcquireAsync(_dbContext, $"reservation:{id}");
+            await using var transaction = await _writeSession.BeginAsync();
+            await _writeSession.LockReservationAsync(id);
 
             var reservation = await _dbContext.Reservations.FindAsync(id);
 
             if (reservation is null)
                 return new ReservationOperationResult(ReservationOperationStatus.ReservationNotFound);
 
-            await _dbContext.Entry(reservation).ReloadAsync();
-            await ReservationLock.TablesAsync(_dbContext, reservation.TableId);
+            await _writeSession.ReloadAsync(reservation);
+            await _writeSession.LockTablesAsync(reservation.TableId);
 
             if (reservation.Status == "Cancelled")
                 return new ReservationOperationResult(ReservationOperationStatus.InvalidStatusTransition);

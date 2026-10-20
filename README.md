@@ -126,11 +126,15 @@ Permanecem as listas geral e por restaurante/mesa/status, `/reservations/upcomin
 
 ## Testes e CI
 
-Somente testes unitários de datas, sem banco:
+Somente testes unitários, sem banco (xUnit, Moq e MockQueryable.Moq):
 
 ```powershell
-dotnet test --filter 'Category!=Integration'
+dotnet test --configuration Release --filter 'Category!=Integration'
 ```
+
+Os arquivos `tests/TableFlow.Tests/Unit/RestaurantServiceTests.cs`, `TableServiceTests.cs`, `ReservationServiceTests.cs` e `ReservationEngineTests.cs` usam mocks de `DbContext`/`DbSet`, motor de validação e coordenação transacional. Cobrem decisões, alterações de estado e chamadas de gravação; não comprovam tradução SQL, constraints ou concorrência real. O filtro `Category=Unit` seleciona apenas essas quatro classes. O filtro acima inclui também os testes de datas. A configuração Release permite executar os testes enquanto a API está aberta em Debug.
+
+`IReservationWriteSession` concentra o início da transação, locks e releitura da reserva para que o `ReservationService` possa ter essas dependências simuladas. A implementação real mantém o protocolo SQL Server existente.
 
 Suíte completa com SQL Server real:
 
