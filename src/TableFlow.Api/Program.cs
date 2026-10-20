@@ -13,7 +13,12 @@ var connectionString =
         "Connection string 'TableFlowDatabase' was not found."
     );
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+    options.ModelBinderProviders.Insert(0, new TableFlow.Api.Serialization.UtcDateTimeBinderProvider()))
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(
+        new TableFlow.Api.Serialization.UtcDateTimeJsonConverter()));
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ConflictExceptionHandler>();
 
 builder.Services.AddScoped<IRestaurantService, RestaurantService>();
 builder.Services.AddScoped<ITableService, TableService>();
@@ -30,6 +35,22 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// Explicit administrative commands; normal startup never changes the schema or data.
+if (args.Contains("--migrate") || args.Contains("--seed"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<TableFlowDbContext>();
+    if (args.Contains("--migrate")) await db.Database.MigrateAsync();
+    if (args.Contains("--seed"))
+    {
+        var sql = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "scripts", "seed-large.sql"));
+        await db.Database.ExecuteSqlRawAsync(sql);
+    }
+    return;
+}
+
+app.UseExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -45,3 +66,5 @@ app.UseHttpsRedirection();
 app.MapControllers();
 
 app.Run();
+
+public partial class Program { }

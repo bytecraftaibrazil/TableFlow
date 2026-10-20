@@ -168,7 +168,7 @@ BEGIN TRY
                     ((CONVERT(int, RIGHT(restaurantTable.Code, 2)) * 11
                       + restaurantTable.TableNumber * 5
                       + sequence.SequenceNumber * 7) % 120) - 30,
-                    CONVERT(datetime2, CONVERT(date, GETDATE()))
+                    CONVERT(datetime2, CONVERT(date, SYSUTCDATETIME()))
                 )
             ) AS ReservationDate,
             1 +
@@ -187,12 +187,13 @@ BEGIN TRY
         CROSS JOIN @ReservationSequence AS sequence
     )
     INSERT INTO dbo.Reservations
-        (RestaurantId, TableId, CustomerName, ReservationDate, PartySize, Status)
+        (RestaurantId, TableId, CustomerName, ReservationDate, DurationMinutes, PartySize, Status)
     SELECT
         data.RestaurantId,
         data.TableId,
         data.CustomerName,
         data.ReservationDate,
+        90,
         data.PartySize,
         data.Status
     FROM ReservationData AS data

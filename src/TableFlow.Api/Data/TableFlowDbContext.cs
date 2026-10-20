@@ -20,6 +20,13 @@ public class TableFlowDbContext : DbContext
     public DbSet<Reservation> Reservations
         => Set<Reservation>();
 
+    private static DateTime RequireUtc(DateTime value)
+    {
+        if (value.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("ReservationDate must be UTC. Audit legacy dates before adopting this policy.");
+        return value;
+    }
+
     protected override void OnModelCreating(
         ModelBuilder modelBuilder
     )
@@ -114,7 +121,10 @@ public class TableFlowDbContext : DbContext
             entity.Property(reservation =>
                 reservation.ReservationDate
             )
-            .HasColumnType("datetime2");
+            .HasColumnType("datetime2")
+            .HasConversion(
+                value => RequireUtc(value),
+                value => DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
             entity.Property(reservation =>
                 reservation.Status

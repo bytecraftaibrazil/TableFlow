@@ -1,6 +1,28 @@
-@TableFlow.Api_HostAddress = http://localhost:5172
+@host = http://localhost:5172
 
-GET {{TableFlow.Api_HostAddress}}/weatherforecast/
+GET {{host}}/restaurants
 Accept: application/json
 
 ###
+POST {{host}}/restaurants
+Content-Type: application/json
+
+{"name":"Bistro Central","cuisineType":"Brasileira","city":"São Paulo","isActive":true}
+
+### Replace ids with the returned values.
+POST {{host}}/tables
+Content-Type: application/json
+
+{"restaurantId":1,"number":1,"capacity":4,"isActive":true}
+
+### Choose a future date with Z or an explicit offset.
+GET {{host}}/reservations/availability?restaurantId=1&partySize=4&reservationDate=2030-11-01T18:00:00Z&durationMinutes=90
+
+### Repeating this request should return 409.
+POST {{host}}/reservations
+Content-Type: application/json
+
+{"restaurantId":1,"tableId":1,"customerName":"Ana Silva","reservationDate":"2030-11-01T18:00:00Z","durationMinutes":90,"partySize":4}
+
+###
+PUT {{host}}/reservations/1/cancel

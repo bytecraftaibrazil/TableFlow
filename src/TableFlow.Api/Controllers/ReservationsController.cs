@@ -288,7 +288,7 @@ namespace TableFlow.Api.Controllers
             [FromQuery] int durationMinutes)
         {
             if (restaurantId <= 0 || partySize <= 0
-                || reservationDate <= DateTime.Now || durationMinutes <= 0
+                || reservationDate.Kind != DateTimeKind.Utc || reservationDate <= DateTime.UtcNow || durationMinutes <= 0
                 || durationMinutes > (DateTime.MaxValue - reservationDate).TotalMinutes)
                 return Problem(
                     statusCode: StatusCodes.Status400BadRequest,
@@ -413,6 +413,9 @@ namespace TableFlow.Api.Controllers
                     statusCode: StatusCodes.Status409Conflict,
                     title: "Reservation conflict",
                     detail: "The selected table is not available for the requested time period.");
+
+            if (result.Status == ReservationOperationStatus.ReservationInputInvalid)
+                return Problem(statusCode: 400, title: "Invalid reservation data", detail: "Use a future UTC date and a positive party size.");
 
             if (result.Status == ReservationOperationStatus.ReservationDurationInvalid)
             {
@@ -562,6 +565,9 @@ namespace TableFlow.Api.Controllers
                     title: "Reservation conflict",
                     detail: "The selected table is not available for the requested time period.");
 
+            if (result.Status == ReservationOperationStatus.ReservationInputInvalid)
+                return Problem(statusCode: 400, title: "Invalid reservation data", detail: "Use a future UTC date and a positive party size.");
+
             if (result.Status == ReservationOperationStatus.ReservationDurationInvalid)
             {
                 return Problem(
@@ -684,7 +690,7 @@ namespace TableFlow.Api.Controllers
             if (customerName.Trim().Length < 3)
                 return "Customer name must have at least 3 characters.";
 
-            if (reservationDate <= DateTime.Now)
+            if (reservationDate.Kind != DateTimeKind.Utc || reservationDate.Kind != DateTimeKind.Utc || reservationDate <= DateTime.UtcNow)
                 return "Reservation date must be in the future.";
 
             if (partySize <= 0)

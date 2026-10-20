@@ -187,8 +187,21 @@ namespace TableFlow.Api.Services
             if (table is null)
                 return false;
 
+            if (await _dbContext.Reservations.AnyAsync(r => r.TableId == id))
+                throw new ResourceConflictException("Table has related records and cannot be deleted.");
+
             _dbContext.Tables.Remove(table);
-            await _dbContext.SaveChangesAsync();
+            try
+            {
+                await _dbContext.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 547 } sql
+                && (sql.Message.Contains("FK_Reservations_Tables_TableId", StringComparison.Ordinal)
+                    || sql.Message.Contains("FK_Reservations_Restaurants_RestaurantId", StringComparison.Ordinal)
+                    || sql.Message.Contains("FK_Tables_Restaurants_RestaurantId", StringComparison.Ordinal)))
+            {
+                throw new ResourceConflictException("Resource has related records and cannot be deleted.");
+            }
 
             return true;
         }

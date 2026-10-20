@@ -1,893 +1,150 @@
 # TableFlow
 
-TableFlow is a restaurant reservation management API built with ASP.NET Core.
+API de reservas de restaurantes em C# / .NET 10, ASP.NET Core, EF Core e SQL Server. Gerencia mesas por capacidade e horário e impede reservas sobrepostas sob concorrência.
 
-The API manages restaurants, tables, and reservations using SQL Server and Entity Framework Core.
+## Funcionalidades e arquitetura
 
-It includes persistence, relational integrity, reservation business rules, table selection, availability queries, overlap detection, conflict prevention, filtering, pagination, and database-level constraints.
+- CRUD de restaurantes e mesas; filtros por cidade, cozinha, restaurante e atividade.
+- Criação e atualização de reservas; confirmação e cancelamento idempotentes.
+- Busca por status, restaurante, mesa, grupo mínimo e datas, com paginação e ordenação estável por data e id.
+- Sugestão de mesa por capacidade e disponibilidade por intervalo.
+- Validação de relacionamentos e regras de reserva; erros HTTP com `ProblemDetails`.
+- Migrations, seed opcional idempotente, testes unitários e integração em SQL Server real.
 
----
-
-## Current Features
-
-### Restaurants
-
-- List restaurants
-- Get restaurant by id
-- Filter restaurants by city
-- Filter restaurants by cuisine type
-- List active restaurants
-- Create restaurants
-- Update restaurants
-- Delete restaurants
-- Persistent storage with SQL Server
-
-### Tables
-
-- List restaurant tables
-- Get table by id
-- Filter tables by restaurant
-- List active tables
-- Create tables
-- Update tables
-- Delete tables
-- Validate restaurant relationships
-- Prevent duplicate table numbers inside the same restaurant
-- Enforce table number and capacity constraints
-- Select a suitable table using a Best Fit strategy
-
-### Reservations
-
-- List reservations
-- Get reservation by id
-- Filter reservations by restaurant
-- Filter reservations by table
-- Filter reservations by status
-- List upcoming reservations
-- List upcoming confirmed reservations
-- List upcoming pending reservations
-- Search reservations with filtering and pagination
-- Create reservations
-- Update reservations
-- Confirm reservations
-- Cancel reservations
-- Store reservation duration
-- Derive reservation end time from start time and duration
-- Validate restaurant and table relationships
-- Validate active restaurants and tables
-- Validate party size against table capacity
-- Query candidate and available tables
-- Detect overlapping reservation intervals
-- Prevent conflicting reservations
-- Allow adjacent non-overlapping reservations
-- Ignore cancelled reservations when checking availability
-- Prevent invalid reservation status transitions
-- Prevent updates to cancelled reservations
-
----
-
-## Reservation Engine
-
-Reservation business rules are centralized in the reservation engine.
-
-The engine is responsible for:
-
-```text
-Restaurant validation
-↓
-Table validation
-↓
-Capacity validation
-↓
-Duration validation
-↓
-Suitable table selection
-↓
-Availability calculation
-↓
-Overlap detection
-↓
-Conflict detection
+```mermaid
+flowchart LR
+    HTTP[Cliente / Swagger] --> Controllers
+    Controllers --> Services
+    Services --> Engine[ReservationEngine: regras e disponibilidade]
+    Services --> EF[TableFlowDbContext / EF Core]
+    Engine --> EF
+    EF --> SQL[(SQL Server)]
 ```
 
-The service layer coordinates application operations and persistence, while controllers handle HTTP concerns.
+Monólito simples: controllers traduzem resultados dos serviços para HTTP; DTOs definem contratos; serviços coordenam persistência; `ReservationEngine` concentra as regras de alocação.
 
-Current request flow:
+## Regras e concorrência
 
-```text
-HTTP Request
-↓
-Controller
-↓
-Service Interface
-↓
-Service
-↓
-Reservation Engine
-↓
-Entity Framework Core
-↓
-SQL Server
-↓
-Application Result
-↓
-Controller
-↓
-HTTP Response
+Restaurante e mesa devem estar ativos; a mesa deve pertencer ao restaurante e acomodar o grupo positivo. A data deve estar no futuro e a duração em minutos deve ser positiva e produzir uma data final válida.
+
+`Pending` e `Confirmed` bloqueiam a mesa; `Cancelled` libera o intervalo. Os intervalos são semiabertos `[início, fim)`: uma reserva pode começar quando a anterior termina. Canceladas não podem ser editadas ou confirmadas. Repetir confirmação de uma confirmada ou cancelamento de uma cancelada retorna o estado atual.
+
+Criação e atualização usam transação SQL Server com `sp_getapplock` exclusivo por mesa antes de consultar conflitos e salvar. Trocar de mesa bloqueia a antiga e a nova por ordem crescente de id. Atualização, confirmação e cancelamento primeiro bloqueiam o id da reserva para evitar decisões com status obsoleto. O lock pertence à transação e é liberado no commit/rollback, inclusive entre instâncias da API. Timeout de lock (10 segundos) e deadlock retornam `409`, permitindo nova tentativa. [Documentação do SQL Server](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-getapplock-transact-sql).
+
+A garantia depende de gravações seguirem esse protocolo; SQL manual e outras aplicações que ignorem os locks não ficam protegidos. Execute o seed como operação administrativa sem tráfego concorrente. Não há constraint SQL de exclusão de intervalos.
+
+Excluir restaurante com mesas/reservas ou mesa com reservas (inclusive canceladas) retorna `409`, sem cascata. A API verifica dependências e também traduz violações das FKs conhecidas se uma dependência surgir entre a verificação e a exclusão. Outros erros de banco não são mascarados. Recurso ausente retorna `404`; exclusão válida, `204`.
+
+## Datas e compatibilidade
+
+JSON e query string exigem ISO 8601 com segundos e `Z` ou offset explícito, como `2030-11-01T18:00:00Z` ou `2030-11-01T15:00:00-03:00`. Entradas sem fuso, datas inválidas e datas sem horário retornam `400`. Offsets são normalizados para UTC antes de validar e persistir. Respostas usam UTC com `Z`; comparações futuras usam `DateTime.UtcNow`.
+
+A coluna existente `datetime2` é mantida: armazena UTC sem metadado de fuso e o EF atribui `DateTimeKind.Utc` ao ler. Nenhuma migration altera horários existentes.
+
+**Antes de usar esta versão sobre banco legado:** faça backup e audite a origem/fuso de `ReservationDate`. Valores comprovadamente UTC permanecem intactos. Valores locais precisam de conversão única, separada e revisada, com o fuso de origem e tratamento das ambiguidades de horário de verão. Valores de origem desconhecida exigem revisão manual: `datetime2` sozinho não recupera o instante original. Não aponte esta versão para esse banco até concluir a auditoria: a leitura assume valores já em UTC. Os testes verificam preservação literal de uma linha legada auditada e rejeição de novas entradas ambíguas.
+
+## Executar localmente (sem Docker)
+
+Pré-requisitos: SDK .NET 10 compatível com `global.json`, SQL Server local iniciado (Developer/Express ou LocalDB no Windows) e conta com permissão de criar/alterar o banco de demonstração. Não é necessário VS Code nem ferramenta global `dotnet-ef`.
+
+Na raiz, em PowerShell:
+
+```powershell
+dotnet restore
+dotnet build --no-restore
+$env:ConnectionStrings__TableFlowDatabase='Server=localhost;Database=TableFlowDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True'
+dotnet run --project src/TableFlow.Api -- --migrate
+dotnet run --project src/TableFlow.Api -- --seed  # opcional
+dotnet run --project src/TableFlow.Api --launch-profile http
 ```
 
----
+Para Express, substitua `localhost` por `.\SQLEXPRESS`; para LocalDB, por `(localdb)\MSSQLLocalDB`. Se usar autenticação SQL, forneça credenciais por variável de ambiente ou user-secrets sem versioná-las. `.env.example` é referência: o .NET não o carrega automaticamente. `TrustServerCertificate=True` é uma conveniência local para certificado próprio.
 
-## Table Selection
+API: `http://localhost:5172`; Swagger: `http://localhost:5172/docs`. Para HTTPS, execute `dotnet dev-certs https --trust` e use `--launch-profile https`, com Swagger em `https://localhost:7095/docs`. A UI é habilitada no ambiente Development.
 
-TableFlow provides a suggested-table endpoint:
+`--migrate` aplica todas as migrations e encerra. `--seed` executa `scripts/seed-large.sql` e encerra. Pode combinar `-- --migrate --seed`. A inicialização normal nunca altera o esquema ou carrega dados. O script também pode ser executado por SSMS ou `sqlcmd` no banco configurado.
+
+O seed adiciona 10 restaurantes, 80 mesas e 480 reservas com 90 minutos, datas UTC e status variados. Identifica seus registros por nomes de demonstração e número da mesa; reexecuções não duplicam registros nem reescrevem suas datas. As datas são relativas à primeira execução; reservas antigas não são renovadas. Há um restaurante inativo para demonstração. Reserve os prefixos `TF Demo -` e `Carga TF ` para o seed.
+
+## Demonstração HTTP
+
+Exemplos para banco novo; use os ids retornados se já houver dados. Escolha uma data futura com fuso explícito.
 
 ```http
-GET /reservations/suggested-table
-```
+POST /restaurants
+Content-Type: application/json
 
-Example:
+{"name":"Bistro Central","cuisineType":"Brasileira","city":"São Paulo","isActive":true}
+
+HTTP/1.1 201 Created
+{"id":1,"name":"Bistro Central","cuisineType":"Brasileira","city":"São Paulo","isActive":true}
+```
 
 ```http
-GET /reservations/suggested-table?restaurantId=1&partySize=4
+POST /tables
+Content-Type: application/json
+
+{"restaurantId":1,"number":1,"capacity":4,"isActive":true}
+
+HTTP/1.1 201 Created
+{"id":1,"restaurantId":1,"number":1,"capacity":4,"isActive":true}
 ```
-
-The selection strategy uses Best Fit:
-
-```text
-Active restaurant
-↓
-Active tables
-↓
-Capacity >= PartySize
-↓
-Order by Capacity
-↓
-Then by Table Number
-↓
-Then by Id
-↓
-First result
-```
-
-This minimizes unused table capacity while keeping the result deterministic.
-
----
-
-## Reservation Availability
-
-TableFlow provides an availability endpoint:
 
 ```http
-GET /reservations/availability
+GET /reservations/availability?restaurantId=1&partySize=4&reservationDate=2030-11-01T18:00:00Z&durationMinutes=90
+
+HTTP/1.1 200 OK
+{"restaurantId":1,"partySize":4,"reservationDate":"2030-11-01T18:00:00.0000000Z","durationMinutes":90,"reservationEnd":"2030-11-01T19:30:00.0000000Z","candidateTables":[{"id":1,"number":1,"capacity":4}],"availableTables":[{"id":1,"number":1,"capacity":4}]}
 ```
 
-Example:
+Disponibilidade representa o estado observado durante a consulta, sem bloquear ou reservar mesas. Pode mudar antes do POST; apenas a criação concluída confirma a alocação. Para offsets positivos em URLs, codifique `+` como `%2B`.
 
 ```http
-GET /reservations/availability?restaurantId=1&partySize=4&reservationDate=2026-10-15T19:00:00&durationMinutes=90
-```
-
-The response separates:
-
-```text
-CandidateTables
-AvailableTables
-```
-
-### Candidate Tables
-
-Candidate tables satisfy structural reservation rules:
-
-- belong to the requested restaurant;
-- restaurant is active;
-- table is active;
-- table capacity is greater than or equal to the requested party size.
-
-### Available Tables
-
-Available tables are candidate tables that do not have a blocking reservation during the requested interval.
-
-Blocking statuses currently include:
-
-```text
-Pending
-Confirmed
-```
-
-Cancelled reservations do not block table availability.
-
----
-
-## Reservation Time Model
-
-A reservation stores:
-
-```text
-ReservationDate
-DurationMinutes
-```
-
-The end time is derived:
-
-```text
-ReservationEnd = ReservationDate + DurationMinutes
-```
-
-`ReservationEnd` is not stored separately in the database.
-
-This avoids redundant temporal data.
-
----
-
-## Overlap Detection
-
-TableFlow uses half-open reservation intervals:
-
-```text
-[start, end)
-```
-
-Two reservations overlap when:
-
-```text
-existingStart < requestedEnd
-&&
-requestedStart < existingEnd
-```
-
-Example conflict:
-
-```text
-Existing:  19:00 → 20:30
-Requested: 19:30 → 21:00
-```
-
-Example without conflict:
-
-```text
-Existing:  19:00 → 20:00
-Requested: 20:00 → 21:00
-```
-
-A reservation may start exactly when another reservation ends.
-
-Conflicting create and update operations return:
-
-```http
-409 Conflict
-```
-
-Updates exclude the reservation being modified from their own conflict check.
-
----
-
-## Reservation Search
-
-TableFlow provides a paginated reservation search endpoint:
-
-```http
-GET /reservations/search
-```
-
-Supported filters:
-
-- `status`
-- `restaurantId`
-- `tableId`
-- `fromDate`
-- `toDate`
-- `minimumPartySize`
-- `descending`
-- `pageNumber`
-- `pageSize`
-
-Example:
-
-```http
-GET /reservations/search?status=Confirmed&restaurantId=1&pageNumber=1&pageSize=20
-```
-
-The search response contains:
-
-```text
-Items
-PageNumber
-PageSize
-TotalCount
-TotalPages
-HasNextPage
-```
-
-Pagination is executed on the database side using:
-
-```text
-Filters
-↓
-CountAsync
-↓
-OrderBy / ThenBy
-↓
-Skip
-↓
-Take
-↓
-Projection
-↓
-ToListAsync
-```
-
----
-
-## API Design
-
-The API currently uses:
-
-- REST-oriented endpoints
-- Controllers
-- Service interfaces
-- Service implementations
-- Reservation business-rule engine
-- Dependency Injection
-- Typed request and response DTOs
-- Application-level operation results
-- Async database operations
-- Consistent HTTP status codes
-- `ProblemDetails` error responses
-- Swagger / OpenAPI documentation
-
----
-
-## Data Layer
-
-TableFlow uses:
-
-- SQL Server
-- Entity Framework Core
-- `DbContext`
-- `DbSet`
-- Fluent API
-- Migrations
-- Primary Keys
-- Foreign Keys
-- Navigation Properties
-- Restricted delete behavior
-- CHECK constraints
-- Unique indexes
-- Composite indexes
-- LINQ queries
-- Query projection
-- `AsNoTracking`
-- Async database access
-
----
-
-## Database Relationships
-
-The current model contains the following relationships:
-
-```text
-Restaurant
-    1
-    │
-    ├────────── N RestaurantTable
-    │
-    └────────── N Reservation
-
-RestaurantTable
-    1
-    │
-    └────────── N Reservation
-```
-
-Reservations reference both:
-
-```text
-RestaurantId
-TableId
-```
-
-Delete behavior is configured with:
-
-```text
-DeleteBehavior.Restrict
-```
-
-to prevent unintended cascade deletion.
-
----
-
-## Database Constraints
-
-The database enforces important integrity rules.
-
-### Tables
-
-```text
-Number > 0
-Capacity > 0
-Capacity <= 50
-```
-
-Constraint names:
-
-```text
-CK_Tables_Number_Positive
-CK_Tables_Capacity_Positive
-CK_Tables_Capacity_Maximum
-```
-
-Table numbers must also be unique inside the same restaurant:
-
-```text
-(RestaurantId, Number)
-```
-
-### Reservations
-
-```text
-PartySize > 0
-DurationMinutes > 0
-```
-
-Valid reservation statuses are:
-
-```text
-Pending
-Confirmed
-Cancelled
-```
-
-Constraint names:
-
-```text
-CK_Reservations_PartySize_Positive
-CK_Reservations_DurationMinutes_Positive
-CK_Reservations_Status_Valid
-```
-
----
-
-## Reservation Indexes
-
-TableFlow currently includes composite indexes designed around reservation query patterns.
-
-### Status and reservation date
-
-```text
-(Status, ReservationDate)
-```
-
-Index:
-
-```text
-IX_Reservations_Status_ReservationDate
-```
-
-This supports queries that filter reservations by status and work with reservation dates.
-
-### Restaurant and reservation date
-
-```text
-(RestaurantId, ReservationDate)
-```
-
-Index:
-
-```text
-IX_Reservations_RestaurantId_ReservationDate
-```
-
-This supports reservation queries scoped to a restaurant and ordered or filtered by date.
-
-Indexes are maintained through Entity Framework Core migrations.
-
----
-
-## Main HTTP Responses
-
-| Scenario | HTTP Response |
-|---|---|
-| Successful query | `200 OK` |
-| Successful update | `200 OK` |
-| Resource created | `201 Created` |
-| Successful deletion | `204 No Content` |
-| Invalid input | `400 Bad Request` |
-| Resource not found | `404 Not Found` |
-| Reservation or state conflict | `409 Conflict` |
-
-Collection and availability endpoints return:
-
-```http
-200 OK
-```
-
-with empty collections when no items match.
-
----
-
-## Main Endpoints
-
-### Restaurants
-
-```http
-GET    /restaurants
-GET    /restaurants/{id}
-GET    /restaurants/city/{city}
-GET    /restaurants/cuisine/{cuisineType}
-GET    /restaurants/active
-
-POST   /restaurants
-
-PUT    /restaurants/{id}
-
-DELETE /restaurants/{id}
-```
-
-### Tables
-
-```http
-GET    /tables
-GET    /tables/{id}
-GET    /tables/restaurant/{restaurantId}
-GET    /tables/active
-
-POST   /tables
-
-PUT    /tables/{id}
-
-DELETE /tables/{id}
-```
-
-### Reservations
-
-```http
-GET /reservations
-GET /reservations/{id}
-GET /reservations/restaurant/{restaurantId}
-GET /reservations/table/{tableId}
-GET /reservations/status/{status}
-GET /reservations/upcoming
-GET /reservations/upcoming/confirmed
-GET /reservations/upcoming/pending
-GET /reservations/search
-GET /reservations/suggested-table
-GET /reservations/availability
-
 POST /reservations
+Content-Type: application/json
 
-PUT /reservations/{id}
-PUT /reservations/{id}/confirm
-PUT /reservations/{id}/cancel
+{"restaurantId":1,"tableId":1,"customerName":"Ana Silva","reservationDate":"2030-11-01T18:00:00Z","durationMinutes":90,"partySize":4}
+
+HTTP/1.1 201 Created
+{"id":1,"restaurantId":1,"tableId":1,"customerName":"Ana Silva","reservationDate":"2030-11-01T18:00:00.0000000Z","durationMinutes":90,"partySize":4,"status":"Pending"}
 ```
 
----
+Repetir o POST para a mesma mesa e intervalo retorna:
 
-## Reservation Status Flow
+```http
+HTTP/1.1 409 Conflict
+Content-Type: application/problem+json
 
-New reservations are created with:
-
-```text
-Pending
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.10","title":"Reservation conflict","status":409,"detail":"The selected table is not available for the requested time period."}
 ```
 
-Supported transitions currently include:
+`ProblemDetails` pode incluir `traceId`. `PUT /reservations/1/confirm` confirma; `PUT /reservations/1/cancel` cancela (sem corpo). Ambos retornam `200` com a reserva. Após cancelar, repita a disponibilidade: a mesa estará livre se não houver outra reserva bloqueadora. `PUT /reservations/1` aceita os mesmos campos do POST para editar reserva ativa.
 
-```text
-Pending
-├── Confirmed
-└── Cancelled
+Busca: `GET /reservations/search?restaurantId=1&status=Pending&pageNumber=1&pageSize=20&descending=false`. Filtros adicionais: `tableId`, `minimumPartySize`, `fromDate` e `toDate` (limites inclusivos, datas com fuso). Resposta: `items`, `pageNumber`, `pageSize`, `totalCount`, `totalPages`, `hasNextPage`. `pageSize` aceita 1 a 100.
+
+Permanecem as listas geral e por restaurante/mesa/status, `/reservations/upcoming`, `/reservations/upcoming/pending`, `/reservations/upcoming/confirmed` e `/reservations/suggested-table?restaurantId=1&partySize=4` (sugestão por capacidade sem horário).
+
+## Testes e CI
+
+Somente testes unitários de datas, sem banco:
+
+```powershell
+dotnet test --filter 'Category!=Integration'
 ```
 
-A confirmed reservation may be cancelled.
+Suíte completa com SQL Server real:
 
-A cancelled reservation:
-
-```text
-cannot be confirmed
-cannot be updated
-does not block table availability
+```powershell
+$env:TABLEFLOW_TEST_SQLSERVER='Server=localhost;Database=master;Integrated Security=True;Encrypt=True;TrustServerCertificate=True'
+dotnet test
 ```
 
-Repeated confirmation or cancellation operations are handled safely by the service behavior.
+A conta precisa criar e excluir bancos. A suíte cria um banco exclusivo `TableFlowTests_<guid>`, aplica migrations e exclui apenas esse banco ao terminar. Não usa InMemory/SQLite nem apaga o banco da aplicação. Sem a variável, a integração aparece explicitamente como ignorada; isso não comprova validação SQL. Com a variável definida, conexão ou migrations inválidas falham os testes.
 
----
+Integração cobre capacidade, atividade, relacionamentos, duração, datas, intervalos consecutivos/sobrepostos, criação/atualização da própria reserva, mudança de mesa concorrente, status concorrentes, disponibilidade, busca/paginação, exclusões e corrida de FK, data legada auditada, migrations e reexecução do seed. Requisições HTTP concorrentes usam escopos/conexões separados e verificam respostas e estado persistido.
 
-## Query Strategy
+O workflow `.github/workflows/ci.yml` executa restore, build Release e todos os testes em push e pull request, com SQL Server LocalDB no runner Windows e resultados TRX como artefato. Falhas nos testes falham o job. O LocalDB consta na [imagem oficial do runner](https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md). Nenhum container é necessário.
 
-Read-only queries use patterns such as:
+## Limitações
 
-```csharp
-.AsNoTracking()
-```
-
-Filtering and ordering are composed through LINQ before query materialization.
-
-Example flow:
-
-```text
-IQueryable
-↓
-Where
-↓
-OrderBy
-↓
-Select
-↓
-ToListAsync
-```
-
-Queries are executed only when materialization or database operations occur, such as:
-
-```text
-ToListAsync
-CountAsync
-FirstOrDefaultAsync
-AnyAsync
-```
-
-Suitable-table selection is shared between table suggestion and availability operations.
-
----
-
-## Migrations
-
-Database structure is maintained through Entity Framework Core migrations.
-
-Current migration history includes changes for:
-
-- Initial database structure
-- Data integrity constraints
-- Maximum table capacity
-- Reservation search indexes
-- Reservation duration
-
-The reservation-duration migration preserves existing records by backfilling a valid duration before making the column required.
-
-Typical workflow:
-
-```text
-Model change
-↓
-dotnet ef migrations add
-↓
-Migration generated
-↓
-dotnet ef database update
-↓
-SQL Server updated
-```
-
----
-
-## Sample Data
-
-The repository includes:
-
-```text
-scripts/seed-large.sql
-```
-
-The script generates related sample data for local development and query analysis.
-
-It creates approximately:
-
-```text
-10 restaurants
-80 tables
-480 reservations
-```
-
-The script is designed to avoid duplicating its own seeded records when executed again.
-
----
-
-## Project Structure
-
-```text
-TableFlow
-├── scripts
-│   └── seed-large.sql
-│
-├── src
-│   └── TableFlow.Api
-│       ├── Controllers
-│       ├── Data
-│       │   ├── Migrations
-│       │   └── TableFlowDbContext.cs
-│       ├── DTOs
-│       ├── Entities
-│       ├── Interfaces
-│       ├── Models
-│       ├── Services
-│       ├── Program.cs
-│       └── TableFlow.Api.csproj
-│
-├── global.json
-├── TableFlow.sln
-└── README.md
-```
-
----
-
-## Tech Stack
-
-- C#
-- .NET 10
-- ASP.NET Core Web API
-- Entity Framework Core
-- SQL Server
-- Swagger / OpenAPI
-- Dependency Injection
-- Git
-
----
-
-## Running Locally
-
-### Requirements
-
-Install:
-
-- .NET 10 SDK
-- SQL Server
-- SQL Server Management Studio
-- Git
-- Visual Studio Code
-
-### Clone the repository
-
-```bash
-git clone https://github.com/bytecraftaibrazil/TableFlow.git
-cd TableFlow
-```
-
-### Restore dependencies
-
-```bash
-dotnet restore
-```
-
-### Build the solution
-
-```bash
-dotnet build
-```
-
-### Database Connection
-
-Configure the SQL Server connection string in:
-
-```text
-src/TableFlow.Api/appsettings.Development.json
-```
-
-The application expects the connection string:
-
-```text
-TableFlowDatabase
-```
-
-### Apply migrations
-
-From the repository root:
-
-```bash
-dotnet ef database update \
-    --project src/TableFlow.Api \
-    --startup-project src/TableFlow.Api
-```
-
-### Start the API
-
-The project is configured to run through the Visual Studio Code debugger.
-
-Use:
-
-```text
-F5
-```
-
-After the application starts, open:
-
-```text
-/docs
-```
-
-to access Swagger UI.
-
----
-
-## Development Workflow
-
-The current development workflow is:
-
-```text
-Change
-↓
-Build
-↓
-Run with F5
-↓
-Swagger smoke test
-↓
-Database verification when necessary
-↓
-Commit
-↓
-Push
-```
-
-Useful commands:
-
-```bash
-dotnet restore
-dotnet build
-dotnet ef migrations add <MigrationName>
-dotnet ef database update
-```
-
----
-
-## Current Architecture
-
-TableFlow currently follows a modular monolith structure inside a single ASP.NET Core application.
-
-```text
-TableFlow.Api
-├── Controllers
-├── DTOs
-├── Interfaces
-├── Models
-├── Services
-├── Data
-├── Entities
-└── Program.cs
-```
-
-The application currently separates HTTP handling, orchestration, reservation rules, persistence, and data access while remaining inside a single project.
-
----
-
-## Next Technical Stages
-
-Planned technical evolution includes:
-
-1. Clean Architecture
-2. Dependency boundaries between Domain, Application, Infrastructure, and API
-3. CQRS and MediatR
-4. Reservation status workflow improvements
-5. Unit and integration testing
-6. Authentication and authorization
-7. Global exception handling
-8. Structured logging and correlation
-9. Health checks and rate limiting
-10. Docker and Docker Compose
-11. GitHub Actions
-12. Azure deployment
-13. Caching and Redis
-14. Idempotency and concurrency handling
-15. Background processing and resiliency
-16. System Design improvements
-
----
-
-## Status
-
-```text
-Project: Active
-
-Current architecture:
-Modular Monolith
-
-Current persistence:
-SQL Server + Entity Framework Core
-
-Current reservation capabilities:
-Table selection + availability + overlap detection + conflict prevention
-
-Current technical stage:
-Preparing for architectural restructuring
-```
-
----
+Projeto de portfólio sem autenticação, integrações externas, observabilidade de produção ou infraestrutura de nuvem. A disponibilidade é consultiva. Mudanças administrativas simultâneas em capacidade/atividade das mesas não usam o protocolo de reserva. Cancelamento mantém o histórico; exclusões preservam as FKs Restrict. Migrations anteriores são preservadas e a política UTC não altera o esquema. Não há push, deploy ou criação de tag no fluxo local.

@@ -230,6 +230,7 @@ namespace TableFlow.Api.Controllers
 
         #region DELETE
         [HttpDelete("{id:int}")]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(
             typeof(ProblemDetails),

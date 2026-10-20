@@ -18,6 +18,10 @@ namespace TableFlow.Api.Services
         public async Task<ReservationValidationResult> ValidateAsync(
             ReservationCandidate candidate, int? excludedReservationId = null)
         {
+            if (candidate.ReservationDate.Kind != DateTimeKind.Utc || candidate.ReservationDate <= DateTime.UtcNow
+                || candidate.PartySize <= 0)
+                return new ReservationValidationResult(ReservationValidationStatus.ReservationInputInvalid);
+
             var restaurantIsActive = await _dbContext.Restaurants
                 .AsNoTracking()
                 .Where(restaurant =>
@@ -142,7 +146,9 @@ namespace TableFlow.Api.Services
                 .Where(reservation => candidateIds.Contains(reservation.TableId))
                 .Select(reservation => new
                 {
-                    reservation.TableId, reservation.ReservationDate, reservation.DurationMinutes
+                    reservation.TableId,
+                    reservation.ReservationDate,
+                    reservation.DurationMinutes
                 })
                 .ToListAsync();
             var conflictingTableIds = blockingReservations

@@ -3,6 +3,7 @@ namespace TableFlow.Api.Models
     public enum ReservationValidationStatus
     {
         Success,
+        ReservationInputInvalid,
         RestaurantNotFound,
         RestaurantInactive,
         TableNotFound,

@@ -40,6 +40,8 @@ namespace TableFlow.Api.Services
         {
             return status switch
             {
+                ReservationValidationStatus.ReservationInputInvalid => ReservationOperationStatus.ReservationInputInvalid,
+
                 ReservationValidationStatus.RestaurantNotFound =>
                     ReservationOperationStatus.RestaurantNotFound,
 
@@ -134,7 +136,7 @@ namespace TableFlow.Api.Services
         {
             var reservations = await _dbContext.Reservations
                 .AsNoTracking()
-                .Where(reservation => reservation.ReservationDate > DateTime.Now)
+                .Where(reservation => reservation.ReservationDate > DateTime.UtcNow)
                 .OrderBy(reservation => reservation.ReservationDate)
                 .ToListAsync();
 
@@ -149,7 +151,7 @@ namespace TableFlow.Api.Services
                     reservation.Status == "Confirmed"
                 )
                 .Where(reservation =>
-                    reservation.ReservationDate > DateTime.Now
+                    reservation.ReservationDate > DateTime.UtcNow
                 )
                 .OrderBy(reservation =>
                     reservation.ReservationDate
@@ -168,7 +170,7 @@ namespace TableFlow.Api.Services
                     reservation.Status == "Pending"
                 )
                 .Where(reservation =>
-                    reservation.ReservationDate > DateTime.Now
+                    reservation.ReservationDate > DateTime.UtcNow
                 )
                 .OrderBy(reservation =>
                     reservation.ReservationDate
@@ -259,6 +261,9 @@ namespace TableFlow.Api.Services
 
         public async Task<ReservationOperationResult> CreateAsync(CreateReservationRequest request)
         {
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            await ReservationLock.TablesAsync(_dbContext, request.TableId);
+
             var candidate = new ReservationCandidate(
                 request.RestaurantId,
                 request.TableId,
@@ -291,6 +296,7 @@ namespace TableFlow.Api.Services
 
             await _dbContext.Reservations.AddAsync(reservation);
             await _dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             return new ReservationOperationResult(
                 ReservationOperationStatus.Success,
@@ -300,10 +306,16 @@ namespace TableFlow.Api.Services
 
         public async Task<ReservationOperationResult> UpdateAsync(int id, UpdateReservationRequest request)
         {
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            await ReservationLock.AcquireAsync(_dbContext, $"reservation:{id}");
+
             var reservation = await _dbContext.Reservations.FindAsync(id);
 
             if (reservation is null)
                 return new ReservationOperationResult(ReservationOperationStatus.ReservationNotFound);
+
+            await _dbContext.Entry(reservation).ReloadAsync();
+            await ReservationLock.TablesAsync(_dbContext, reservation.TableId, request.TableId);
 
             if (reservation.Status == "Cancelled")
                 return new ReservationOperationResult(
@@ -341,6 +353,7 @@ namespace TableFlow.Api.Services
             reservation.PartySize = request.PartySize;
 
             await _dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             return new ReservationOperationResult(
                     ReservationOperationStatus.Success,
@@ -351,10 +364,16 @@ namespace TableFlow.Api.Services
 
         public async Task<ReservationOperationResult> CancelAsync(int id)
         {
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            await ReservationLock.AcquireAsync(_dbContext, $"reservation:{id}");
+
             var reservation = await _dbContext.Reservations.FindAsync(id);
 
             if (reservation is null)
                 return new ReservationOperationResult(ReservationOperationStatus.ReservationNotFound);
+
+            await _dbContext.Entry(reservation).ReloadAsync();
+            await ReservationLock.TablesAsync(_dbContext, reservation.TableId);
 
             if (reservation.Status == "Cancelled")
                 return new ReservationOperationResult(ReservationOperationStatus.Success, ToResponse(reservation));
@@ -362,6 +381,7 @@ namespace TableFlow.Api.Services
             reservation.Status = "Cancelled";
 
             await _dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             return new ReservationOperationResult(
                 ReservationOperationStatus.Success,
@@ -371,10 +391,16 @@ namespace TableFlow.Api.Services
 
         public async Task<ReservationOperationResult> ConfirmAsync(int id)
         {
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            await ReservationLock.AcquireAsync(_dbContext, $"reservation:{id}");
+
             var reservation = await _dbContext.Reservations.FindAsync(id);
 
             if (reservation is null)
                 return new ReservationOperationResult(ReservationOperationStatus.ReservationNotFound);
+
+            await _dbContext.Entry(reservation).ReloadAsync();
+            await ReservationLock.TablesAsync(_dbContext, reservation.TableId);
 
             if (reservation.Status == "Cancelled")
                 return new ReservationOperationResult(ReservationOperationStatus.InvalidStatusTransition);
@@ -390,6 +416,7 @@ namespace TableFlow.Api.Services
             reservation.Status = "Confirmed";
 
             await _dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             return new ReservationOperationResult(
                 ReservationOperationStatus.Success,
